@@ -1,0 +1,210 @@
+// ============================================================
+// VOXEMPIRE — Spieldaten & Balance
+// Alle Formeln leben hier. Der Server rechnet damit autoritativ,
+// der Client bekommt nur fertige Zahlen (via /api/meta + /api/state).
+// ============================================================
+
+// Welt-Geschwindigkeit: skaliert Produktion und teilt Bau-/Trainings-/Reisezeiten.
+// Zum Testen z.B. mit  VOX_SPEED=50 node server.js  starten.
+export const SPEED = Math.max(0.1, Number(process.env.VOX_SPEED || 3));
+
+export const WORLD_SIZE = 101;            // Karte 0..100, Zentrum 50/50
+export const SAVE_INTERVAL_MS = 15_000;   // Autosave-Intervall
+// Anfängerschutz in Minuten (entfällt nur beim eigenen Angriff). Default: 24 h.
+export const PROTECTION_MS = Number(process.env.VOX_PROTECTION_MIN ?? 1440) * 60_000;
+export const TOKEN_TTL_MS = 30 * 24 * 3_600_000;
+export const MAX_BUILD_QUEUE = 2;
+export const MAX_TRAIN_QUEUE = 5;
+export const MAX_REPORTS = 50;
+export const MAX_CHAT = 100;              // Anzahl gespeicherter Chat-Nachrichten (Welt-Chat)
+
+export const RES = ['holz', 'stein', 'eisen'];
+export const RES_NAMES = { holz: 'Holz', stein: 'Stein', eisen: 'Eisen' };
+
+// ---------- Gebäude ----------
+// cost = Basiskosten für Stufe 1, wächst mit 1.6^(stufe-1)
+// time = Bauzeit Stufe 1 in Sekunden, wächst mit 1.5^(stufe-1)
+export const BUILDINGS = {
+  rathaus: { name: 'Rathaus',          desc: 'Verkürzt alle Bauzeiten um 4 % pro Stufe.',                cost: { holz: 120, stein: 140, eisen: 100 }, time: 35, max: 20 },
+  holz:    { name: 'Holzfällerlager',  desc: 'Produziert Holz.',                                          cost: { holz: 45,  stein: 70,  eisen: 30 },  time: 25, max: 25 },
+  stein:   { name: 'Steinbruch',       desc: 'Produziert Stein.',                                         cost: { holz: 70,  stein: 45,  eisen: 30 },  time: 25, max: 25 },
+  eisen:   { name: 'Eisenmine',        desc: 'Produziert Eisen.',                                         cost: { holz: 60,  stein: 60,  eisen: 40 },  time: 28, max: 25 },
+  lager:   { name: 'Lager',            desc: 'Erhöht die Lagerkapazität aller Rohstoffe.',                cost: { holz: 80,  stein: 90,  eisen: 50 },  time: 30, max: 20 },
+  farm:    { name: 'Bauernhof',        desc: 'Erhöht die Versorgung — bestimmt, wie viele Truppen du unterhalten kannst.', cost: { holz: 70, stein: 80, eisen: 30 }, time: 30, max: 20 },
+  kaserne: { name: 'Kaserne',          desc: 'Ermöglicht Truppenausbildung, ‑10 % Ausbildungszeit pro Stufe.', cost: { holz: 150, stein: 160, eisen: 120 }, time: 50, max: 15, req: { rathaus: 2 } },
+  markt:   { name: 'Marktplatz',       desc: 'Ermöglicht Handel. Pro Stufe ein weiteres aktives Angebot.', cost: { holz: 130, stein: 110, eisen: 90 },  time: 45, max: 10, req: { rathaus: 4 } },
+  mauer:   { name: 'Stadtmauer',       desc: 'Erhöht die Verteidigung um 6 % pro Stufe.',                 cost: { holz: 50,  stein: 140, eisen: 40 },  time: 40, max: 20, req: { rathaus: 3 } },
+};
+
+// ---------- Einheiten ----------
+// off/def = Kampfkraft, speed = Felder pro Stunde (vor SPEED),
+// carry = Beutekapazität, up = Versorgung, time = Ausbildung/Einheit in Sekunden
+export const UNITS = {
+  speer:   { name: 'Speerträger',    off: 15,  def: 45,  speed: 7,  carry: 40,  up: 1, cost: { holz: 50,  stein: 35,  eisen: 20 },  time: 30,  req: { kaserne: 1 } },
+  bogen:   { name: 'Bogenschütze',   off: 40,  def: 20,  speed: 9,  carry: 30,  up: 1, cost: { holz: 80,  stein: 20,  eisen: 40 },  time: 38,  req: { kaserne: 2 } },
+  spaeher: { name: 'Späher',         off: 0,   def: 8,   speed: 20, carry: 0,   up: 1, cost: { holz: 40,  stein: 30,  eisen: 50 },  time: 40,  scout: true, req: { kaserne: 2 } },
+  schwert: { name: 'Schwertkämpfer', off: 60,  def: 25,  speed: 6,  carry: 30,  up: 1, cost: { holz: 35,  stein: 30,  eisen: 75 },  time: 45,  req: { kaserne: 3 } },
+  axt:     { name: 'Axtkämpfer',     off: 85,  def: 20,  speed: 6,  carry: 45,  up: 1, cost: { holz: 90,  stein: 30,  eisen: 90 },  time: 55,  req: { kaserne: 4 } },
+  reiter:  { name: 'Reiter',         off: 100, def: 40,  speed: 14, carry: 80,  up: 3, cost: { holz: 120, stein: 90,  eisen: 140 }, time: 75,  req: { kaserne: 5 } },
+  wache:   { name: 'Panzerwache',    off: 20,  def: 100, speed: 5,  carry: 20,  up: 2, cost: { holz: 60,  stein: 110, eisen: 90 },  time: 65,  req: { kaserne: 6 } },
+  ramme:   { name: 'Belagerungsramme', off: 160, def: 55, speed: 4,  carry: 0,   up: 5, cost: { holz: 260, stein: 130, eisen: 200 }, time: 120, req: { kaserne: 8 } },
+  paladin: { name: 'Paladin',        off: 180, def: 120, speed: 12, carry: 100, up: 4, cost: { holz: 180, stein: 140, eisen: 260 }, time: 140, req: { kaserne: 10 } },
+};
+
+// ---------- Formeln ----------
+export function buildCost(key, toLevel) {
+  const base = BUILDINGS[key].cost;
+  const f = Math.pow(1.6, toLevel - 1);
+  const out = {};
+  for (const r of RES) out[r] = Math.round(base[r] * f);
+  return out;
+}
+
+export function buildTimeMs(key, toLevel, rathausLevel) {
+  const base = BUILDINGS[key].time * Math.pow(1.5, toLevel - 1);
+  const bonus = 1 + 0.04 * (rathausLevel || 0);
+  return Math.max(1000, Math.round((base / bonus / SPEED) * 1000));
+}
+
+// Produktion pro Stunde für eine Minen-Stufe
+export function prodPerHour(level) {
+  if (level <= 0) return 8 * SPEED;
+  return Math.round(30 * level * Math.pow(1.16, level)) * SPEED;
+}
+
+export function storageCap(lagerLevel) {
+  if (lagerLevel <= 0) return 600;
+  return Math.round(1000 * Math.pow(1.55, lagerLevel - 1));
+}
+
+// Versorgung: wie viel Truppen-Unterhalt der Bauernhof trägt
+export function popCap(farmLevel) {
+  return 20 + 24 * farmLevel;
+}
+
+// ---------- Bewohner & Sammeln ----------
+// Jedes Dorf hat Bewohner (Arbeiter) abhängig von der Rathausstufe.
+// Freie Bewohner können auf Rohstoffvorkommen der Weltkarte geschickt
+// werden (Wald → Holz, Steinbruch → Stein, Eisenader → Eisen). Sie
+// reisen hin, sammeln eine Weile und kehren mit Rohstoffen zurück.
+export const WORKER_SPEED = 6;                 // Felder/h (vor SPEED) – gemächlicher als Truppen
+export const GATHER_WORK_MS = 15 * 60_000;     // reine Sammelzeit am Vorkommen (vor SPEED)
+
+// Gesamtzahl der Bewohner eines Dorfes nach Rathausstufe.
+export function residentsCap(rathausLevel) {
+  return 4 + 4 * (rathausLevel || 0);
+}
+
+// Reisezeit der Arbeiter für eine Strecke (eine Richtung).
+export function gatherTravelMs(dist) {
+  return Math.max(1000, Math.round((dist / (WORKER_SPEED * SPEED)) * 3_600_000));
+}
+
+// Reine Arbeitszeit am Vorkommen (unabhängig von der Entfernung).
+export function gatherWorkMs() {
+  return Math.max(1000, Math.round(GATHER_WORK_MS / SPEED));
+}
+
+// Ausbeute einer Sammelrunde: pro Arbeiter und Ergiebigkeit des Vorkommens.
+export function gatherYield(workers, richness) {
+  return Math.max(0, Math.round(workers * (richness || 1) * 12 * SPEED));
+}
+
+// Deterministisches Rauschen für die Platzierung der Vorkommen –
+// gleiche Koordinate ergibt immer dasselbe Vorkommen (Server & Client
+// sehen dieselbe Welt, da der Client die Knoten über /api/map bezieht).
+function nodeHash(x, y) {
+  const n = Math.sin((x + 1) * 91.73 + (y + 1) * 47.19) * 24634.6345;
+  return n - Math.floor(n);
+}
+
+// Liefert das Rohstoffvorkommen auf Feld (x,y) oder null.
+// { res: 'holz'|'stein'|'eisen', richness: 1..3 }
+export function resourceNodeAt(x, y) {
+  if (!Number.isInteger(x) || !Number.isInteger(y)) return null;
+  if (x < 0 || y < 0 || x >= WORLD_SIZE || y >= WORLD_SIZE) return null;
+  if (nodeHash(x, y) > 0.16) return null;                 // ~16 % der Felder tragen ein Vorkommen
+  const pick = nodeHash(x * 2.7 + 13, y * 1.3 + 41);
+  const res = pick < 0.4 ? 'holz' : pick < 0.72 ? 'stein' : 'eisen';
+  const richness = 1 + Math.floor(nodeHash(x * 0.7 + 5, y * 3.9 + 8) * 3); // 1..3
+  return { res, richness };
+}
+
+export function trainTimeMs(unitKey, count, kaserneLevel) {
+  const per = UNITS[unitKey].time / (1 + 0.10 * Math.max(0, (kaserneLevel || 1) - 1));
+  return Math.max(1000, Math.round((per * count / SPEED) * 1000));
+}
+
+// Reisezeit: Distanz / Geschwindigkeit der langsamsten Einheit
+export function travelTimeMs(dist, unitCounts) {
+  let slowest = Infinity;
+  for (const [k, n] of Object.entries(unitCounts)) {
+    if (n > 0 && UNITS[k]) slowest = Math.min(slowest, UNITS[k].speed);
+  }
+  if (!Number.isFinite(slowest)) slowest = 1;
+  return Math.max(2000, Math.round((dist / (slowest * SPEED)) * 3_600_000));
+}
+
+export function villagePoints(village) {
+  let p = 0;
+  for (const lvl of Object.values(village.buildings)) {
+    p += Math.round(10 * Math.pow(lvl, 1.4));
+  }
+  for (const n of Object.values(village.units)) p += n;
+  return p;
+}
+
+// ---------- Aufträge (Quests) & Spielerstufe ----------
+// Aufträge sind eine feste Kette. Jeder Auftrag prüft eine Kennzahl gegen
+// einen Zielwert (metric.kind / key / target). Ist das Ziel erreicht, kann
+// die Belohnung (Rohstoffe + XP) abgeholt werden. Gesammelte XP bestimmen
+// die Spielerstufe; höhere Aufträge schalten sich erst ab einer Mindeststufe
+// frei (metric-unabhängig über `reqLevel`).
+//
+// metric.kind:
+//   'building'   Gebäudestufe von key   ≥ target
+//   'units'      Gesamtzahl aller Truppen ≥ target
+//   'unit'       Anzahl der Einheit key   ≥ target
+//   'points'     Dorfpunkte               ≥ target
+//   'pop'        belegte Versorgung       ≥ target
+//   'residents'  Bewohner-Kapazität       ≥ target
+//   'attacksWon' gewonnene Angriffe (Stat)≥ target
+//   'gathered'   gesammelte Rohstoffe (Stat) ≥ target
+export const QUESTS = [
+  { id: 'rathaus2',  reqLevel: 1, name: 'Sitz der Macht',      desc: 'Baue das Rathaus auf Stufe 2 aus.',            metric: { kind: 'building', key: 'rathaus', target: 2 }, xp: 15,  reward: { holz: 150, stein: 150, eisen: 90 } },
+  { id: 'holz3',     reqLevel: 1, name: 'Holzwirtschaft',      desc: 'Bringe das Holzfällerlager auf Stufe 3.',       metric: { kind: 'building', key: 'holz',    target: 3 }, xp: 20,  reward: { holz: 250, stein: 120, eisen: 60 } },
+  { id: 'stein3',    reqLevel: 1, name: 'Fester Grund',        desc: 'Bringe den Steinbruch auf Stufe 3.',            metric: { kind: 'building', key: 'stein',   target: 3 }, xp: 20,  reward: { holz: 120, stein: 250, eisen: 60 } },
+  { id: 'eisen3',    reqLevel: 1, name: 'Erz in Strömen',      desc: 'Bringe die Eisenmine auf Stufe 3.',             metric: { kind: 'building', key: 'eisen',   target: 3 }, xp: 20,  reward: { holz: 120, stein: 120, eisen: 180 } },
+
+  { id: 'lager3',    reqLevel: 2, name: 'Volle Lager',         desc: 'Baue das Lager auf Stufe 3 aus.',               metric: { kind: 'building', key: 'lager',   target: 3 }, xp: 25,  reward: { holz: 300, stein: 300, eisen: 150 } },
+  { id: 'kaserne1',  reqLevel: 2, name: 'Zu den Waffen',       desc: 'Errichte eine Kaserne.',                        metric: { kind: 'building', key: 'kaserne', target: 1 }, xp: 30,  reward: { holz: 300, stein: 300, eisen: 250 } },
+  { id: 'army10',    reqLevel: 2, name: 'Erste Streitmacht',   desc: 'Unterhalte insgesamt 10 Truppen.',              metric: { kind: 'units',                 target: 10 }, xp: 35, reward: { holz: 350, stein: 250, eisen: 300 } },
+  { id: 'gather400', reqLevel: 2, name: 'Fleißige Hände',      desc: 'Sammle insgesamt 400 Rohstoffe mit Bewohnern.', metric: { kind: 'gathered',              target: 400 }, xp: 30, reward: { holz: 250, stein: 250, eisen: 200 } },
+
+  { id: 'mauer3',    reqLevel: 3, name: 'Trutzige Mauern',     desc: 'Baue die Stadtmauer auf Stufe 3.',              metric: { kind: 'building', key: 'mauer',   target: 3 }, xp: 40,  reward: { holz: 300, stein: 500, eisen: 200 } },
+  { id: 'attack1',   reqLevel: 3, name: 'Feuertaufe',          desc: 'Gewinne einen Angriff auf ein Dorf.',           metric: { kind: 'attacksWon',            target: 1 },  xp: 45, reward: { holz: 400, stein: 400, eisen: 400 } },
+  { id: 'points400', reqLevel: 3, name: 'Aufstrebendes Dorf',  desc: 'Erreiche 400 Dorfpunkte.',                      metric: { kind: 'points',                target: 400 }, xp: 40, reward: { holz: 400, stein: 400, eisen: 300 } },
+
+  { id: 'markt1',    reqLevel: 4, name: 'Freier Handel',       desc: 'Errichte einen Marktplatz.',                    metric: { kind: 'building', key: 'markt',   target: 1 }, xp: 45,  reward: { holz: 450, stein: 400, eisen: 350 } },
+  { id: 'army50',    reqLevel: 4, name: 'Stehendes Heer',      desc: 'Unterhalte insgesamt 50 Truppen.',              metric: { kind: 'units',                 target: 50 }, xp: 60,  reward: { holz: 600, stein: 500, eisen: 600 } },
+  { id: 'attack5',   reqLevel: 4, name: 'Kriegsherr',          desc: 'Gewinne 5 Angriffe.',                           metric: { kind: 'attacksWon',            target: 5 },  xp: 70, reward: { holz: 700, stein: 700, eisen: 700 } },
+
+  { id: 'rathaus10', reqLevel: 5, name: 'Metropole',           desc: 'Baue das Rathaus auf Stufe 10 aus.',            metric: { kind: 'building', key: 'rathaus', target: 10 }, xp: 100, reward: { holz: 1200, stein: 1200, eisen: 900 } },
+  { id: 'points1500',reqLevel: 5, name: 'Regionalmacht',       desc: 'Erreiche 1500 Dorfpunkte.',                     metric: { kind: 'points',                target: 1500 }, xp: 120, reward: { holz: 1500, stein: 1500, eisen: 1200 } },
+];
+
+// XP, um von `level` auf die nächste Stufe zu steigen (wächst je Stufe).
+export function xpToNext(level) {
+  return Math.round(60 * Math.pow(1.35, Math.max(1, level) - 1));
+}
+
+// Gesamte gesammelte XP → aktuelle Stufe + Fortschritt in die nächste.
+// Liefert { level, into (XP in aktueller Stufe), need (XP für nächste Stufe) }.
+export function levelForXp(xp) {
+  xp = Math.max(0, Math.floor(xp || 0));
+  let level = 1;
+  let acc = 0;
+  while (xp >= acc + xpToNext(level)) { acc += xpToNext(level); level++; }
+  return { level, into: xp - acc, need: xpToNext(level) };
+}
+

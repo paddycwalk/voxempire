@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="VOXEMPIRE">
+  <defs>
+    <linearGradient id="ve-gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f2c766"/>
+      <stop offset="1" stop-color="#c8933a"/>
+    </linearGradient>
+    <linearGradient id="ve-goldDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d7a441"/>
+      <stop offset="1" stop-color="#a5772a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Krone auf der Mittelmauer -->
+  <g fill="url(#ve-gold)">
+    <rect x="46" y="16" width="9" height="12"/>
+    <rect x="59" y="10" width="10" height="18"/>
+    <rect x="73" y="16" width="9" height="12"/>
+    <rect x="44" y="28" width="40" height="9"/>
+  </g>
+  <rect x="47" y="29" width="6" height="6" fill="#6ea8dc"/>
+  <rect x="61" y="29" width="6" height="6" fill="#e05f5f"/>
+  <rect x="75" y="29" width="6" height="6" fill="#6fc276"/>
+
+  <!-- Burg: zwei Türme mit Zinnen -->
+  <g fill="url(#ve-goldDark)">
+    <!-- linker Turm -->
+    <rect x="16" y="52" width="9" height="9"/>
+    <rect x="32" y="52" width="9" height="9"/>
+    <rect x="16" y="61" width="25" height="51"/>
+    <!-- rechter Turm -->
+    <rect x="87" y="52" width="9" height="9"/>
+    <rect x="103" y="52" width="9" height="9"/>
+    <rect x="87" y="61" width="25" height="51"/>
+  </g>
+  <!-- Mittelmauer (heller, nach vorne) -->
+  <g fill="url(#ve-gold)">
+    <rect x="41" y="46" width="9" height="9"/>
+    <rect x="59" y="46" width="10" height="9"/>
+    <rect x="78" y="46" width="9" height="9"/>
+    <rect x="41" y="55" width="46" height="57"/>
+  </g>
+
+  <!-- Tor -->
+  <path d="M55 112 v-24 a9 9 0 0 1 18 0 v24 z" fill="#12151c"/>
+  <rect x="62.5" y="90" width="3" height="22" fill="url(#ve-goldDark)"/>
+
+  <!-- Turmfenster -->
+  <rect x="25" y="72" width="7" height="12" fill="#12151c"/>
+  <rect x="96" y="72" width="7" height="12" fill="#12151c"/>
+</svg>

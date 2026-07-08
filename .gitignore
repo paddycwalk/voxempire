@@ -1,0 +1,11 @@
+# Persistenz / lokale Daten — niemals committen (enthaelt Passwort-Hashes)
+db.json
+db.test.json
+*.tmp
+
+# macOS / Editor
+.DS_Store
+
+# Node
+node_modules/
+*.log

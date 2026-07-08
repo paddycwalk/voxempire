@@ -1,0 +1,13 @@
+{
+  "name": "voxempire",
+  "version": "1.0.0",
+  "description": "VOXEMPIRE — Browser-Aufbau-MMO mit persistenter Welt (Rohstoffe, Handel, Allianzen, Kriege)",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
