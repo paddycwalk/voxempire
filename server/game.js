@@ -1104,6 +1104,24 @@ export function acceptFriendRequest(user, id) {
   const req = db.friendRequests[idx];
   db.friendRequests.splice(idx, 1);
   addFriendPair(req.from, req.to);
+  // Beide Seiten über die neue Freundschaft benachrichtigen.
+  const now = Date.now();
+  const requester = db.users[req.from];
+  const accepter = db.users[req.to];
+  if (accepter) {
+    addReport(accepter, {
+      time: now, kind: "Freundschaft",
+      title: `Du bist jetzt mit ${req.fromName} befreundet`,
+      partner: req.fromName,
+    });
+  }
+  if (requester) {
+    addReport(requester, {
+      time: now, kind: "Freundschaft",
+      title: `${req.toName} hat deine Freundschaftsanfrage angenommen`,
+      partner: req.toName,
+    });
+  }
   return friendData(user);
 }
 
@@ -1326,7 +1344,8 @@ export function mapView(cx, cy, radius = 6) {
   return { villages: tiles, nodes };
 }
 
-export function ranking() {
+export function ranking(user) {
+  const myFriends = user ? new Set(db.friends[user.name.toLowerCase()] || []) : new Set();
   return Object.values(db.users)
     .map((u) => {
       const v = db.villages[u.villageId];
@@ -1338,12 +1357,12 @@ export function ranking() {
         points: villagePoints(v),
         x: v.x,
         y: v.y,
+        friend: myFriends.has(u.name.toLowerCase()),
       };
     })
     .sort((x, y) => y.points - x.points)
     .slice(0, 100);
 }
-
 // Menschlich lesbare Wirkung einer Gebäudestufe (fürs UI, Formeln bleiben serverseitig)
 function buildingEffect(key, level) {
   switch (key) {

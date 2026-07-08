@@ -8,12 +8,12 @@
 // (z. B. Ausbau, Kartenwechsel) den Zoom nicht zurücksetzt.
 // Öffentliche API: enableZoomPan(container, key)
 // ============================================================
-'use strict';
+"use strict";
 
 (function () {
-  const MIN = 1;     // nicht kleiner als Originalgröße
-  const MAX = 4;     // maximale Vergrößerung
-  const TAP = 6;     // Bewegungsschwelle (px), darunter zählt es als Klick/Tipp
+  const MIN = 1; // nicht kleiner als Originalgröße
+  const MAX = 4; // maximale Vergrößerung
+  const TAP = 6; // Bewegungsschwelle (px), darunter zählt es als Klick/Tipp
 
   // key -> { s, tx, ty } — überlebt das Neuzeichnen des Containers
   const store = Object.create(null);
@@ -22,14 +22,14 @@
 
   function enableZoomPan(container, key) {
     if (!container) return;
-    const svg = container.querySelector('svg');
+    const svg = container.querySelector("svg");
     if (!svg) return;
 
     const st = store[key] || (store[key] = { s: 1, tx: 0, ty: 0 });
 
-    svg.style.transformOrigin = '0 0';
-    svg.style.willChange = 'transform';
-    container.style.touchAction = 'none'; // Browser-Gesten (Seiten-Zoom/Scroll) hier unterdrücken
+    svg.style.transformOrigin = "0 0";
+    svg.style.willChange = "transform";
+    container.style.touchAction = "none"; // Browser-Gesten (Seiten-Zoom/Scroll) hier unterdrücken
 
     // Transform anwenden + Verschiebung so begrenzen, dass der Inhalt den Container füllt.
     function apply() {
@@ -38,7 +38,7 @@
       st.tx = clamp(st.tx, w * (1 - st.s), 0);
       st.ty = clamp(st.ty, h * (1 - st.s), 0);
       svg.style.transform = `translate(${st.tx}px, ${st.ty}px) scale(${st.s})`;
-      container.style.cursor = st.s > 1 ? 'grab' : '';
+      container.style.cursor = st.s > 1 ? "grab" : "";
     }
 
     // Zoomen um einen festen Punkt (fx, fy) in Container-Koordinaten.
@@ -52,15 +52,18 @@
     }
 
     // Bereits verdrahtet (derselbe DOM-Knoten, z. B. günstiges Refresh)? Nur neu anwenden.
-    if (container.dataset.zoomPan === '1') { apply(); return; }
-    container.dataset.zoomPan = '1';
+    if (container.dataset.zoomPan === "1") {
+      apply();
+      return;
+    }
+    container.dataset.zoomPan = "1";
 
     apply();
 
     const pointers = new Map(); // pointerId -> {x, y} in Container-Koordinaten
-    let panStart = null;        // { x, y, tx, ty } für Ein-Finger/Maus-Verschieben
-    let pinch = null;           // { dist, mid, s, tx, ty } Ausgangslage der Pinch-Geste
-    let moved = false;          // wurde nennenswert bewegt? (unterdrückt Klick)
+    let panStart = null; // { x, y, tx, ty } für Ein-Finger/Maus-Verschieben
+    let pinch = null; // { dist, mid, s, tx, ty } Ausgangslage der Pinch-Geste
+    let moved = false; // wurde nennenswert bewegt? (unterdrückt Klick)
     let lastTap = 0;
 
     const local = (e) => {
@@ -70,7 +73,7 @@
     const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
     const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 
-    container.addEventListener('pointerdown', (e) => {
+    container.addEventListener("pointerdown", (e) => {
       const p = local(e);
       pointers.set(e.pointerId, p);
       // Wichtig: hier NICHT sofort setPointerCapture aufrufen — sonst wird der
@@ -84,22 +87,37 @@
         // Doppeltipp/-klick → Zoom zurücksetzen
         const now = Date.now();
         if (now - lastTap < 300) {
-          st.s = 1; st.tx = 0; st.ty = 0; apply();
+          st.s = 1;
+          st.tx = 0;
+          st.ty = 0;
+          apply();
           lastTap = 0;
         } else {
           lastTap = now;
         }
       } else if (pointers.size === 2) {
         const pts = [...pointers.values()];
-        pinch = { dist: dist(pts[0], pts[1]), mid: mid(pts[0], pts[1]), s: st.s, tx: st.tx, ty: st.ty };
+        pinch = {
+          dist: dist(pts[0], pts[1]),
+          mid: mid(pts[0], pts[1]),
+          s: st.s,
+          tx: st.tx,
+          ty: st.ty,
+        };
         moved = true; // Zwei Finger sind nie ein Klick
         // Zwei Finger = Geste (nie ein Klick): Pointer jetzt einfangen, damit
         // Bewegungen ausserhalb des SVG weiter ankommen.
-        for (const id of pointers.keys()) { try { container.setPointerCapture(id); } catch { /* egal */ } }
+        for (const id of pointers.keys()) {
+          try {
+            container.setPointerCapture(id);
+          } catch {
+            /* egal */
+          }
+        }
       }
     });
 
-    container.addEventListener('pointermove', (e) => {
+    container.addEventListener("pointermove", (e) => {
       if (!pointers.has(e.pointerId)) return;
       const p = local(e);
       pointers.set(e.pointerId, p);
@@ -127,13 +145,17 @@
           moved = true;
           // Echtes Ziehen erkannt (kein Klick): Pointer jetzt einfangen, damit
           // das Verschieben auch ausserhalb des SVG weiterläuft.
-          try { container.setPointerCapture(e.pointerId); } catch { /* egal */ }
+          try {
+            container.setPointerCapture(e.pointerId);
+          } catch {
+            /* egal */
+          }
         }
         if (moved) {
           st.tx = panStart.tx + dx;
           st.ty = panStart.ty + dy;
           apply();
-          container.style.cursor = 'grabbing';
+          container.style.cursor = "grabbing";
           e.preventDefault();
         }
       }
@@ -142,33 +164,45 @@
     function endPointer(e) {
       if (!pointers.has(e.pointerId)) return;
       pointers.delete(e.pointerId);
-      try { container.releasePointerCapture(e.pointerId); } catch { /* egal */ }
+      try {
+        container.releasePointerCapture(e.pointerId);
+      } catch {
+        /* egal */
+      }
       if (pointers.size < 2) pinch = null;
       if (pointers.size === 0) {
         panStart = null;
-        if (st.s > 1) container.style.cursor = 'grab';
+        if (st.s > 1) container.style.cursor = "grab";
       }
     }
-    container.addEventListener('pointerup', endPointer);
-    container.addEventListener('pointercancel', endPointer);
+    container.addEventListener("pointerup", endPointer);
+    container.addEventListener("pointercancel", endPointer);
 
     // Nach einer Verschiebung/Pinch den folgenden Klick schlucken,
     // damit nicht versehentlich ein Gebäude/Feld ausgewählt wird.
-    container.addEventListener('click', (e) => {
-      if (moved) {
-        moved = false;
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }, true);
+    container.addEventListener(
+      "click",
+      (e) => {
+        if (moved) {
+          moved = false;
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      },
+      true,
+    );
 
     // Mausrad-Zoom (Desktop) um den Cursor herum.
-    container.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const p = local(e);
-      const step = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-      zoomAt(p.x, p.y, st.s * step);
-    }, { passive: false });
+    container.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        const p = local(e);
+        const step = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+        zoomAt(p.x, p.y, st.s * step);
+      },
+      { passive: false },
+    );
   }
 
   window.enableZoomPan = enableZoomPan;

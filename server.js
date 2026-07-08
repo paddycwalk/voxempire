@@ -108,7 +108,7 @@ const routes = {
     fn: (u, _, __, q) =>
       game.mapView(Number(q.get("x")), Number(q.get("y")), 6),
   },
-  "GET  /api/ranking": { auth: true, fn: () => game.ranking() },
+  "GET  /api/ranking": { auth: true, fn: (u) => game.ranking(u) },
   "GET  /api/reports": { auth: true, fn: (u) => game.getReports(u) },
 
   "GET  /api/profile": { auth: true, fn: (u) => game.getProfile(u) },

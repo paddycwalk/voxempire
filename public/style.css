@@ -393,6 +393,49 @@ th.num {
   display: block;
 }
 
+/* Militär-Übersicht in der Dorf-Seitenleiste */
+.garrison-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.garrison-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.garrison-portrait {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+}
+.garrison-portrait svg {
+  width: 30px;
+  height: 30px;
+  display: block;
+}
+.garrison-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.garrison-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.garrison-total {
+  margin-top: 8px;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+
 .building-row {
   display: flex;
   align-items: center;

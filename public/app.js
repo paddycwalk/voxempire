@@ -785,12 +785,33 @@ renderers.dorf = () => {
       <aside class="village-side">
         <div class="card building-panel" id="buildingPanel">${buildingPanelHtml()}</div>
         <div class="card"><h3 class="card-title">🏗️ Bauschleife</h3><div id="buildQueue">${queueHtml()}</div></div>
+        <div class="card"><h3 class="card-title">🛡️ Militär im Dorf</h3><div id="villageGarrison">${garrisonHtml()}</div></div>
         <div class="card"><h3 class="card-title">🚩 Truppenbewegungen</h3><div id="villageMoves">${movementsHtml()}</div></div>
       </aside>
     </div>`;
   enableZoomPan($(".village-scene-wrap"), "village");
   lastSceneSig = sceneSignature();
 };
+
+// Baut das HTML der im Dorf stationierten Truppen — kompakte Übersicht in der Dorf-Seitenleiste
+function garrisonHtml() {
+  const v = state.village;
+  const rows = Object.entries(meta.UNITS)
+    .filter(([key]) => (v.units[key]?.count || 0) > 0)
+    .map(([key, def]) => {
+      const cnt = v.units[key].count;
+      return `<div class="garrison-item" title="${esc(def.name)}">
+        <span class="garrison-portrait">${UNIT_ICONS[key] || ""}</span>
+        <span class="garrison-name">${esc(def.name)}</span>
+        <span class="garrison-count">${fmtNum(cnt)}</span>
+      </div>`;
+    })
+    .join("");
+  if (!rows) return '<p class="muted">Keine Truppen im Dorf.</p>';
+  const total = Object.values(v.units).reduce((s, u) => s + (u.count || 0), 0);
+  return `<div class="garrison-grid">${rows}</div>
+    <div class="garrison-total">Gesamt: <b>${fmtNum(total)}</b> Einheiten · Versorgung ${fmtNum(v.pop)}/${fmtNum(v.popCap)}</div>`;
+}
 
 // Baut das HTML der Truppenbewegungen (ein- und ausgehend) — wird im Dorf- und Militär-Tab genutzt
 function movementsHtml() {
@@ -867,6 +888,8 @@ function refreshDorfCheap() {
   if (panel) panel.innerHTML = buildingPanelHtml();
   const queue = $("#buildQueue");
   if (queue) queue.innerHTML = queueHtml();
+  const garrison = $("#villageGarrison");
+  if (garrison) garrison.innerHTML = garrisonHtml();
   const moves = $("#villageMoves");
   if (moves) moves.innerHTML = movementsHtml();
 }
@@ -2035,12 +2058,23 @@ renderers.berichte = async () => {
       </div>`;
   };
 
+  const friendReport = (r) => {
+    return `
+      <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
+        <div class="rhead"><b>🤝 ${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+        <div class="rbody hidden">
+          <p class="muted">Du bist jetzt mit ${esc(r.partner)} befreundet.</p>
+        </div>
+      </div>`;
+  };
+
   const items = reports.length
     ? reports
         .map((r) => {
           if (r.kind === "Spionage") return spyReport(r);
           if (r.kind === "Handel") return tradeReport(r);
           if (r.kind === "Sammeln") return gatherReport(r);
+          if (r.kind === "Freundschaft") return friendReport(r);
           const iAmAttacker = r.attacker.name === state.user.name;
           const success = iAmAttacker ? r.won : !r.won;
           const lootTotal = r.loot
@@ -2103,7 +2137,7 @@ renderers.rangliste = async () => {
       <td><b>${esc(p.name)}</b>${p.alliance ? ` <span class="muted">[${esc(p.alliance)}]</span>` : ""}</td>
       <td>(${p.x}|${p.y})</td>
       <td class="num">${fmtNum(p.points)}</td>
-      <td>${p.name === state.user.name ? "" : `<button class="btn small" onclick="friendRequestFor('${esc(p.name)}')">🤝 Freund</button>`}</td>
+      <td>${p.name === state.user.name || p.friend ? "" : `<button class="btn small" onclick="friendRequestFor('${esc(p.name)}')">🤝 Freund</button>`}</td>
     </tr>`,
     )
     .join("");
