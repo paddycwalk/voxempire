@@ -54,6 +54,17 @@ Beispiel für eine schnelle Testrunde: `VOX_SPEED=50 VOX_PROTECTION_MIN=1 node s
   Die **Ergiebigkeit** (★ 1–3) eines Vorkommens bestimmt die Ausbeute pro Bewohner.
   Freie/gesamte Bewohner stehen in der Kopfleiste (👷); die Vorkommen erscheinen
   direkt auf der Karte und sind anklickbar.
+- **Räuberüberfälle & Wachen**: Unterwegs kann eine Sammelmission von Räubern
+  überfallen werden (~30 % Chance). Schicke optional **Wachen** (Truppen) mit —
+  sind sie stark genug, wehren sie den Überfall ab; sonst **sterben Bewohner**.
+  Gefallene Bewohner werden im **Rathaus nachgezogen** (1 alle 5 Minuten, bis
+  wieder alle da sind). Auch bei einer verlorenen Verteidigung des Dorfes fallen
+  Bewohner.
+- **Verstärkung (Truppen abstellen)**: Klicke auf ein **eigenes weiteres Dorf**
+  oder ein **Allianzmitglied** und entsende Truppen zur Unterstützung. Sie
+  verteidigen das Zieldorf mit (Späher ausgenommen) und lassen sich jederzeit
+  über die Truppenbewegungen **zurückbeordern**. Stationierte Verstärkung zählt
+  weiter zum Unterhalt des Herkunftsdorfes.
 - **Angriffe**: Auf der Karte ein Dorf anklicken, Truppen wählen, losschicken.
   Truppen reisen in Echtzeit, kämpfen, plündern und kehren mit Beute zurück.
   Beide Seiten erhalten einen Kampfbericht. Die Stadtmauer des Verteidigers

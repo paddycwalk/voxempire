@@ -38,6 +38,9 @@ import {
   gatherWorkMs,
   gatherYield,
   resourceNodeAt,
+  residentRegenMs,
+  GATHER_AMBUSH_CHANCE,
+  banditPower,
   QUESTS,
   xpToNext,
   levelForXp,
@@ -149,6 +152,9 @@ function createVillage(ownerName) {
     trainQueue: [], // Ausbildung:  { unit, count, done }
     protectedUntil: Date.now() + PROTECTION_MS,
     conquest: null, // Adelungs-Fortschritt: { by, progress } oder null
+    residentsLost: 0, // gefallene Bewohner, werden im Rathaus nachgezogen
+    residentsRegenAt: Date.now(), // Zeitstempel, ab dem der nächste Bewohner nachwächst
+    garrison: {}, // stationierte Verstärkung fremder Dörfer: { [fromVillageId]: { owner, units } }
   };
   db.villages[id] = village;
   db.world[`${x},${y}`] = id;
@@ -207,6 +213,7 @@ export function selectVillage(user, id) {
 // Produziert segmentweise, damit ein zwischenzeitlich fertiggestellter
 // Minen-Ausbau ab seinem Fertigstellungszeitpunkt korrekt mitproduziert.
 export function touchVillage(v, now = Date.now()) {
+  ensureVillageFields(v);
   const finishedBuilds = v.queue
     .filter((q) => q.done <= now)
     .sort((a, b) => a.done - b.done);
@@ -224,6 +231,51 @@ export function touchVillage(v, now = Date.now()) {
   for (const q of finishedTrainings)
     v.units[q.unit] = (v.units[q.unit] || 0) + q.count;
   v.trainQueue = v.trainQueue.filter((q) => q.done > now);
+
+  regenResidents(v, now);
+}
+
+// Felder, die es in älteren Spielständen noch nicht gab, nachrüsten (migrationsfrei).
+function ensureVillageFields(v) {
+  if (v.residentsLost == null) v.residentsLost = 0;
+  if (v.residentsRegenAt == null) v.residentsRegenAt = Date.now();
+  if (v.garrison == null) v.garrison = {};
+}
+
+// Gefallene Bewohner im Rathaus nachziehen: je residentRegenMs() ein Bewohner.
+function regenResidents(v, now) {
+  if (v.residentsLost <= 0) {
+    v.residentsRegenAt = now;
+    return;
+  }
+  const per = residentRegenMs();
+  const elapsed = now - (v.residentsRegenAt || now);
+  if (elapsed < per) return;
+  const restored = Math.min(v.residentsLost, Math.floor(elapsed / per));
+  v.residentsLost -= restored;
+  v.residentsRegenAt =
+    v.residentsLost <= 0 ? now : (v.residentsRegenAt || now) + restored * per;
+}
+
+// Verfügbare Gesamt-Bewohner (Kapazität abzüglich gefallener, noch nicht ersetzter).
+function residentsTotal(v) {
+  return Math.max(
+    0,
+    residentsCap(v.buildings.rathaus) - (v.residentsLost || 0),
+  );
+}
+
+// n Bewohner fallen lassen (durch Überfall/Angriff); Nachwuchs-Zähler starten.
+function killResidents(v, n) {
+  n = Math.max(0, Math.floor(n));
+  if (n <= 0) return 0;
+  const cap = residentsCap(v.buildings.rathaus);
+  const room = Math.max(0, cap - (v.residentsLost || 0));
+  const dead = Math.min(n, room);
+  if (dead <= 0) return 0;
+  if ((v.residentsLost || 0) <= 0) v.residentsRegenAt = Date.now();
+  v.residentsLost = (v.residentsLost || 0) + dead;
+  return dead;
 }
 
 function produceSpan(v, from, to) {
@@ -254,9 +306,27 @@ function popUsed(v) {
   for (const ev of db.events) {
     if (
       (ev.type === "attack" && ev.from === v.id) ||
+      (ev.type === "reinforce" && ev.from === v.id) ||
       (ev.type === "return" && ev.to === v.id)
     ) {
       for (const [k, n] of Object.entries(ev.units))
+        pop += (UNITS[k]?.up || 0) * n;
+    }
+    // Wachen, die eine Sammelmission begleiten, bleiben im Unterhalt.
+    if (
+      (ev.type === "gather" || ev.type === "gatherReturn") &&
+      ev.village === v.id
+    ) {
+      for (const [k, n] of Object.entries(ev.guards || {}))
+        pop += (UNITS[k]?.up || 0) * n;
+    }
+  }
+  // Eigene Verstärkung, die in fremden Dörfern stationiert ist, zählt weiter
+  // zum Unterhalt des Herkunftsdorfes.
+  for (const tv of Object.values(db.villages)) {
+    const stack = tv.garrison?.[v.id];
+    if (stack) {
+      for (const [k, n] of Object.entries(stack.units))
         pop += (UNITS[k]?.up || 0) * n;
     }
   }
@@ -481,7 +551,9 @@ export function scout(user, x, y, count) {
 
 // Bewohner auf ein Rohstoffvorkommen der Weltkarte schicken.
 // Sie reisen hin, sammeln (gatherWorkMs) und kehren mit Rohstoffen zurück.
-export function gather(user, x, y, workers) {
+// Optional können Wachen (Truppen) mitgeschickt werden, die die Bewohner
+// gegen Räuberüberfälle verteidigen.
+export function gather(user, x, y, workers, guards) {
   const v = db.villages[user.villageId];
   touchVillage(v);
   x = Math.floor(Number(x));
@@ -491,8 +563,18 @@ export function gather(user, x, y, workers) {
     fail("Dort gibt es kein Rohstoffvorkommen.");
   workers = Math.floor(Number(workers));
   if (!(workers >= 1)) fail("Wähle mindestens einen Bewohner.");
-  const idle = residentsCap(v.buildings.rathaus) - residentsBusy(v);
+  const idle = residentsTotal(v) - residentsBusy(v);
   if (workers > idle) fail(`Nur ${Math.max(0, idle)} Bewohner verfügbar.`);
+
+  // Wachen prüfen und abbuchen (Späher können nicht bewachen – sie kämpfen nicht).
+  const guardUnits = {};
+  for (const [k, def] of Object.entries(UNITS)) {
+    if (def.scout) continue;
+    const n = Math.max(0, Math.floor(Number(guards?.[k] || 0)));
+    if (n > (v.units[k] || 0)) fail(`Nicht genügend ${def.name}.`);
+    if (n > 0) guardUnits[k] = n;
+  }
+  for (const [k, n] of Object.entries(guardUnits)) v.units[k] -= n;
 
   const dist = Math.hypot(v.x - x, v.y - y);
   const travel = gatherTravelMs(dist);
@@ -509,7 +591,84 @@ export function gather(user, x, y, workers) {
     res: node.res,
     richness: node.richness,
     workers,
+    guards: guardUnits,
     travel,
+  });
+  return { arrival: at };
+}
+
+// Verstärkung in ein befreundetes Dorf schicken und dort stationieren.
+// Erlaubt für eigene weitere Dörfer und Allianzmitglieder. Die Truppen
+// verteidigen das Zieldorf mit und können zurückbeordert werden.
+export function reinforce(user, x, y, unitCounts) {
+  const v = db.villages[user.villageId];
+  touchVillage(v);
+  const targetId = db.world[`${x},${y}`] || fail("Dort liegt kein Dorf.");
+  if (targetId === v.id) fail("Truppen sind bereits in diesem Dorf.");
+  const target = db.villages[targetId];
+  const defender = db.users[target.owner];
+  const own = target.owner === user.name.toLowerCase();
+  const sameAlliance =
+    user.allianceId && defender.allianceId === user.allianceId;
+  if (!own && !sameAlliance)
+    fail("Verstärken kannst du nur eigene Dörfer oder Allianzmitglieder.");
+  touchVillage(target);
+
+  const units = {};
+  let total = 0;
+  for (const [k, def] of Object.entries(UNITS)) {
+    if (def.scout) continue; // Späher verteidigen nicht
+    const n = Math.max(0, Math.floor(Number(unitCounts?.[k] || 0)));
+    if (n > (v.units[k] || 0)) fail(`Nicht genügend ${def.name}.`);
+    if (n > 0) {
+      units[k] = n;
+      total += n;
+    }
+  }
+  if (total === 0) fail("Wähle mindestens eine Einheit.");
+  for (const [k, n] of Object.entries(units)) v.units[k] -= n;
+
+  const dist = Math.hypot(v.x - target.x, v.y - target.y);
+  const start = Date.now();
+  const at = start + travelTimeMs(dist, units);
+  db.events.push({
+    id: nextId("e"),
+    type: "reinforce",
+    at,
+    start,
+    from: v.id,
+    to: target.id,
+    owner: user.name.toLowerCase(),
+    units,
+  });
+  return { arrival: at };
+}
+
+// Eigene, in einem fremden Dorf stationierte Verstärkung zurückbeordern.
+// Die Truppen marschieren zum Herkunftsdorf (fromId) zurück.
+export function recallReinforcement(user, targetId, fromId) {
+  const target = db.villages[targetId] || fail("Dorf existiert nicht mehr.");
+  fromId = fromId || user.villageId;
+  const stack = target.garrison?.[fromId];
+  if (!stack || stack.owner !== user.name.toLowerCase())
+    fail("Dort steht keine Verstärkung von dir.");
+  const home = db.villages[fromId];
+  if (!home || home.owner !== user.name.toLowerCase())
+    fail("Das Herkunftsdorf gehört dir nicht mehr.");
+  const units = stack.units;
+  delete target.garrison[fromId];
+
+  const dist = Math.hypot(target.x - home.x, target.y - home.y);
+  const now = Date.now();
+  const at = now + travelTimeMs(dist, units);
+  db.events.push({
+    id: nextId("e"),
+    type: "return",
+    at,
+    start: now,
+    from: target.id,
+    to: home.id,
+    units,
   });
   return { arrival: at };
 }
@@ -523,6 +682,7 @@ export function processEvents(now = Date.now()) {
     if (ev.type === "attack") resolveAttack(ev, now);
     else if (ev.type === "scout") resolveScout(ev, now);
     else if (ev.type === "return") resolveReturn(ev);
+    else if (ev.type === "reinforce") resolveReinforce(ev, now);
     else if (ev.type === "gather") resolveGather(ev, now);
     else if (ev.type === "gatherReturn") resolveGatherReturn(ev, now);
   }
@@ -539,6 +699,12 @@ function resolveAttack(ev, now) {
   for (const [k, n] of Object.entries(ev.units)) atk += UNITS[k].off * n;
   let defPower = 20; // Grundverteidigung des Dorfes
   for (const [k, n] of Object.entries(dv.units)) defPower += UNITS[k].def * n;
+  // Stationierte Verstärkung fremder Dörfer kämpft mit.
+  const garrison = dv.garrison || {};
+  for (const stack of Object.values(garrison)) {
+    for (const [k, n] of Object.entries(stack.units || {}))
+      defPower += (UNITS[k]?.def || 0) * n;
+  }
   defPower *= 1 + 0.06 * dv.buildings.mauer;
 
   const ratio = atk / defPower;
@@ -555,6 +721,17 @@ function resolveAttack(ev, now) {
   for (const [k, n] of Object.entries(dv.units)) {
     defLost[k] = Math.min(n, Math.round(n * defLossFrac));
     dv.units[k] -= defLost[k];
+  }
+  // Verstärkungstruppen tragen dieselbe Verlustquote und werden ausgedünnt.
+  const garrisonLost = {};
+  for (const [fromId, stack] of Object.entries(garrison)) {
+    for (const [k, n] of Object.entries(stack.units)) {
+      const l = Math.min(n, Math.round(n * defLossFrac));
+      if (l > 0) garrisonLost[k] = (garrisonLost[k] || 0) + l;
+      stack.units[k] = n - l;
+      if (stack.units[k] <= 0) delete stack.units[k];
+    }
+    if (!Object.keys(stack.units).length) delete garrison[fromId];
   }
 
   // Beute: Überlebende plündern, begrenzt durch Tragekapazität
@@ -573,6 +750,16 @@ function resolveAttack(ev, now) {
         dv.res[r] -= loot[r];
       });
     }
+  }
+
+  // Bei einer verlorenen Verteidigung sterben auch Bewohner im geplünderten
+  // Dorf. Sie werden anschließend im Rathaus nachgezogen (1 je 5 Min).
+  let residentsKilled = 0;
+  if (won) {
+    residentsKilled = killResidents(
+      dv,
+      residentsTotal(dv) * Math.min(0.3, defLossFrac * 0.3),
+    );
   }
 
   // Paladin-Adelung: Überlebt ein Paladin einen gewonnenen Angriff, sinkt die
@@ -607,6 +794,8 @@ function resolveAttack(ev, now) {
       lost: defLost,
       power: Math.round(defPower),
       wall: dv.buildings.mauer,
+      garrisonLost: Object.keys(garrisonLost).length ? garrisonLost : null,
+      residentsLost: residentsKilled || 0,
     },
     won,
     loot,
@@ -798,12 +987,120 @@ function resolveReturn(ev) {
   }
 }
 
+// Verstärkung erreicht das Zieldorf: Truppen ins Garnisons-Register (nach
+// Herkunftsdorf gebündelt) einreihen und beide Seiten benachrichtigen.
+function resolveReinforce(ev, now) {
+  const to = db.villages[ev.to];
+  if (!to) return;
+  touchVillage(to, now);
+  if (!to.garrison) to.garrison = {};
+  const stack = to.garrison[ev.from] || { owner: ev.owner, units: {} };
+  stack.owner = ev.owner;
+  for (const [k, n] of Object.entries(ev.units))
+    stack.units[k] = (stack.units[k] || 0) + n;
+  to.garrison[ev.from] = stack;
+
+  const sender = db.users[ev.owner];
+  const host = db.users[to.owner];
+  const label = Object.entries(ev.units)
+    .map(([k, n]) => `${n}× ${UNITS[k].name}`)
+    .join(", ");
+  if (sender) {
+    addReport(sender, {
+      time: now,
+      kind: "Verstärkung",
+      title: `🤝 Verstärkung erreicht ${to.name}`,
+      target: to.name,
+      x: to.x,
+      y: to.y,
+      units: ev.units,
+    });
+  }
+  if (host && host !== sender) {
+    addReport(host, {
+      time: now,
+      kind: "Verstärkung",
+      title: `🛡️ ${sender ? sender.name : "Ein Verbündeter"} verstärkt ${to.name}: ${label}`,
+      x: to.x,
+      y: to.y,
+      units: ev.units,
+    });
+  }
+}
+
 // Bewohner sind am Vorkommen fertig: Ausbeute berechnen und Rückreise starten.
 function resolveGather(ev, now) {
   const v = db.villages[ev.village];
   if (!v) return;
   touchVillage(v, now);
-  const amount = gatherYield(ev.workers, ev.richness);
+
+  let workers = ev.workers;
+  const guards = { ...ev.guards };
+  let ambush = null;
+
+  // Räuberüberfall? Mitgeschickte Wachen verteidigen die Bewohner.
+  if (Math.random() < GATHER_AMBUSH_CHANCE) {
+    const power = banditPower(ev.richness, ev.workers);
+    let guardDef = 0;
+    for (const [k, n] of Object.entries(guards))
+      guardDef += (UNITS[k]?.def || 0) * n;
+    const ratio = guardDef / Math.max(1, power);
+    const guardLost = {};
+    let residentsKilled = 0;
+    if (ratio >= 1) {
+      // Abgewehrt: Wachen nehmen nur leichte Verluste, Bewohner bleiben heil.
+      for (const [k, n] of Object.entries(guards)) {
+        const l = Math.round(n * Math.min(0.15, (power / guardDef) * 0.15));
+        if (l > 0) {
+          guardLost[k] = l;
+          guards[k] = n - l;
+          if (guards[k] <= 0) delete guards[k];
+        }
+      }
+    } else {
+      // Überrannt: je schwächer die Wachen, desto mehr Bewohner fallen.
+      const overrun = 1 - ratio;
+      residentsKilled = Math.min(
+        workers,
+        Math.round(workers * Math.min(0.75, overrun)),
+      );
+      workers -= residentsKilled;
+      const gloss = Math.min(1, 0.4 + overrun * 0.6);
+      for (const [k, n] of Object.entries(guards)) {
+        const l = Math.min(n, Math.round(n * gloss));
+        if (l > 0) {
+          guardLost[k] = l;
+          guards[k] = n - l;
+          if (guards[k] <= 0) delete guards[k];
+        }
+      }
+    }
+    if (residentsKilled > 0) killResidents(v, residentsKilled);
+    ambush = {
+      power,
+      guardDef,
+      residentsKilled,
+      guardLost,
+      repelled: ratio >= 1,
+    };
+    addReport(db.users[v.owner], {
+      time: now,
+      kind: "Überfall",
+      title: ambush.repelled
+        ? `🛡️ Räuber am ${nodeLabel(ev.res)} (${ev.x}|${ev.y}) abgewehrt`
+        : `🗡️ Überfall am ${nodeLabel(ev.res)} (${ev.x}|${ev.y}): ${residentsKilled} Bewohner gefallen`,
+      res: ev.res,
+      x: ev.x,
+      y: ev.y,
+      banditPower: power,
+      guardDef,
+      residentsKilled,
+      guardLost,
+      repelled: ambush.repelled,
+    });
+  }
+
+  const amount = gatherYield(workers, ev.richness);
   const back = ev.travel || gatherTravelMs(Math.hypot(v.x - ev.x, v.y - ev.y));
   db.events.push({
     id: nextId("e"),
@@ -814,7 +1111,8 @@ function resolveGather(ev, now) {
     x: ev.x,
     y: ev.y,
     res: ev.res,
-    workers: ev.workers,
+    workers,
+    guards,
     yield: amount,
   });
 }
@@ -829,6 +1127,9 @@ function resolveGatherReturn(ev, now = Date.now()) {
   v.res[ev.res] = Math.min(cap, before + (ev.yield || 0));
   const stored = Math.floor(v.res[ev.res] - before);
   const wasted = Math.max(0, Math.floor((ev.yield || 0) - stored));
+  // Überlebende Wachen kehren ins Dorf zurück.
+  for (const [k, n] of Object.entries(ev.guards || {}))
+    v.units[k] = (v.units[k] || 0) + n;
   questStat(db.users[v.owner], "gathered", ev.yield || 0);
   addReport(db.users[v.owner], {
     time: now,
@@ -843,6 +1144,11 @@ function resolveGatherReturn(ev, now = Date.now()) {
     wasted,
     stock: resSnapshot(v),
   });
+}
+
+// Menschlich lesbarer Name eines Vorkommen-Typs (Wald/Steinbruch/Eisenader).
+function nodeLabel(res) {
+  return res === "holz" ? "Wald" : res === "stein" ? "Steinbruch" : "Eisenader";
 }
 
 function addReport(user, report) {
@@ -1551,7 +1857,10 @@ export function getState(user) {
   const outgoing = db.events
     .filter(
       (e) =>
-        ((e.type === "attack" || e.type === "scout") && e.from === v.id) ||
+        ((e.type === "attack" ||
+          e.type === "scout" ||
+          e.type === "reinforce") &&
+          e.from === v.id) ||
         (e.type === "return" && e.to === v.id) ||
         ((e.type === "gather" || e.type === "gatherReturn") &&
           e.village === v.id),
@@ -1565,6 +1874,7 @@ export function getState(user) {
           at: e.at,
           start: e.start || null,
           workers: e.workers,
+          guards: e.guards || null,
           res: e.res,
           yield: e.yield || null,
           target:
@@ -1626,9 +1936,53 @@ export function getState(user) {
       pop: popUsed(v),
       popCap: popCap(v.buildings.farm),
       residents: (() => {
-        const total = residentsCap(v.buildings.rathaus);
+        const cap = residentsCap(v.buildings.rathaus);
+        const lost = v.residentsLost || 0;
+        const total = Math.max(0, cap - lost);
         const busy = residentsBusy(v);
-        return { total, busy, idle: Math.max(0, total - busy) };
+        return {
+          cap,
+          total,
+          lost,
+          busy,
+          idle: Math.max(0, total - busy),
+          // Zeitpunkt, zu dem der nächste gefallene Bewohner nachwächst.
+          nextRegen:
+            lost > 0 ? (v.residentsRegenAt || now) + residentRegenMs() : null,
+          regenMs: residentRegenMs(),
+        };
+      })(),
+      // Fremde Verstärkung, die aktuell in diesem Dorf steht.
+      reinforcements: Object.entries(v.garrison || {})
+        .map(([fromId, stack]) => ({
+          fromId,
+          owner: db.users[stack.owner]?.name || stack.owner,
+          fromVillage: db.villages[fromId]?.name || "?",
+          units: stack.units,
+        }))
+        .filter((r) => Object.keys(r.units).length),
+      // Eigene Truppen, die in fremden Dörfern stationiert sind (mit Rückruf-Handle).
+      stationed: (() => {
+        const key = user.name.toLowerCase();
+        const out = [];
+        for (const tv of Object.values(db.villages)) {
+          for (const [fromId, stack] of Object.entries(tv.garrison || {})) {
+            if (stack.owner !== key) continue;
+            if (!ownedVillages(user).some((ov) => ov.id === fromId)) continue;
+            if (!Object.keys(stack.units).length) continue;
+            out.push({
+              targetId: tv.id,
+              target: tv.name,
+              owner: db.users[tv.owner]?.name || tv.owner,
+              x: tv.x,
+              y: tv.y,
+              fromId,
+              fromVillage: db.villages[fromId]?.name || "?",
+              units: stack.units,
+            });
+          }
+        }
+        return out;
       })(),
       buildings,
       units: unitsMeta,

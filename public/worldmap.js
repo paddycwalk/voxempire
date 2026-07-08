@@ -392,6 +392,7 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
     return: "#4b7a3a",
     gather: "#b8860b",
     gatherReturn: "#4b7a3a",
+    reinforce: "#2e8b8b",
   };
   const unitTotal = (u) =>
     u ? Object.values(u).reduce((a, b) => a + (b || 0), 0) : 0;

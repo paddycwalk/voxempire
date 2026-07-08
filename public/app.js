@@ -34,6 +34,7 @@ let activeTab = "dorf";
 let mapCenter = null; // {x,y}
 let selectedTile = null;
 let selectedNode = null; // aktuell gewähltes Rohstoffvorkommen auf der Karte
+let pendingMapSelect = null; // {x,y}: nach dem Kartenwechsel dieses Dorf auswählen
 let pollTimer = null;
 let chatTimer = null; // eigener Poll-Timer, läuft nur wenn der Chat-Tab offen ist
 
@@ -455,8 +456,14 @@ function renderHeader() {
   $("#rateEisen").textContent = `+${fmtNum(v.rates.eisen)}/h`;
   $("#resPop").textContent = `${v.pop}/${v.popCap}`;
   const resEl = $("#resResidents");
-  if (resEl && v.residents)
+  if (resEl && v.residents) {
     resEl.textContent = `${v.residents.idle}/${v.residents.total}`;
+    const lost = v.residents.lost || 0;
+    resEl.title = lost
+      ? `${lost} Bewohner gefallen – wachsen im Rathaus nach (1 je ${fmtDur(v.residents.regenMs)})`
+      : "Freie / verfügbare Bewohner";
+    resEl.classList.toggle("res-wounded", lost > 0);
+  }
 
   // Dorf-Auswahl: nur einblenden, wenn man mehr als ein Dorf besitzt.
   const vsel = $("#villageSelect");
@@ -871,7 +878,9 @@ function movementsHtml() {
           ? `⚔️ Angriff auf ${esc(m.target)} (${m.x}|${m.y})`
           : m.type === "scout"
             ? `🔍 Spähen von ${esc(m.target)} (${m.x}|${m.y})`
-            : `↩️ Rückkehr von ${esc(m.target)}`;
+            : m.type === "reinforce"
+              ? `🤝 Verstärkung nach ${esc(m.target)} (${m.x}|${m.y})`
+              : `↩️ Rückkehr von ${esc(m.target)}`;
       const loot = m.loot ? ` · Beute: ${costHtml(m.loot)}` : "";
       const cancel =
         (m.type === "attack" || m.type === "scout") && m.id
@@ -880,7 +889,31 @@ function movementsHtml() {
       return `<div class="queue-item"><span>${what} — ${units}${loot}</span>${countdown(m.at)}${cancel}</div>`;
     })
     .join("");
-  return inc + out || '<p class="muted">Keine Bewegungen.</p>';
+
+  // Eigene Truppen, die in fremden Dörfern stationiert sind (mit Rückruf).
+  const stationed = (state.village.stationed || [])
+    .map((s) => {
+      const units = Object.entries(s.units)
+        .map(([k, n]) => `${n}× ${meta.UNITS[k].name}`)
+        .join(", ");
+      return `<div class="queue-item"><span>🤝 Verstärkt ${esc(s.target)} (${s.x}|${s.y}, ${esc(s.owner)}) — ${units}</span>
+        <button class="btn small" onclick="recallReinforce('${s.targetId}','${s.fromId}')" title="Zurückbeordern">↩️ Rückruf</button></div>`;
+    })
+    .join("");
+
+  // Fremde Verstärkung, die aktuell in diesem Dorf steht.
+  const present = (state.village.reinforcements || [])
+    .map((r) => {
+      const units = Object.entries(r.units)
+        .map(([k, n]) => `${n}× ${meta.UNITS[k].name}`)
+        .join(", ");
+      return `<div class="queue-item"><span>🛡️ Verstärkung von ${esc(r.owner)} (${esc(r.fromVillage)}) — ${units}</span></div>`;
+    })
+    .join("");
+
+  return (
+    inc + out + stationed + present || '<p class="muted">Keine Bewegungen.</p>'
+  );
 }
 
 // Baut nur die Bauschleife (rechte Spalte)
@@ -1128,8 +1161,30 @@ renderers.karte = async () => {
     <div class="world-map">${mapSvg}</div>
     <div id="villageDetail" class="village-detail"></div>`;
   enableZoomPan($(".world-map"), "map");
+
+  // Aus der Rangliste angesprungenes Dorf jetzt automatisch auswählen.
+  if (pendingMapSelect) {
+    const target = (data.villages || []).find(
+      (v) => v.x === pendingMapSelect.x && v.y === pendingMapSelect.y,
+    );
+    pendingMapSelect = null;
+    if (target) {
+      selectedTile = target;
+      selectedNode = null;
+    }
+  }
+
   if (selectedNode) renderNodeDetail();
   else if (selectedTile) renderVillageDetail();
+};
+
+// Aus der Rangliste heraus auf die Karte springen und das Dorf markieren.
+window.showOnMap = (x, y) => {
+  mapCenter = { x, y };
+  selectedTile = null;
+  selectedNode = null;
+  pendingMapSelect = { x, y };
+  switchTab("karte");
 };
 
 window.moveMap = (dx, dy) => {
@@ -1165,11 +1220,16 @@ function renderVillageDetail() {
   const el = $("#villageDetail");
   if (!el || !t) return;
   const own = t.owner === state.user.name;
+  const isActive = t.x === state.village.x && t.y === state.village.y;
+  const ally = !own && !!t.alliance && t.alliance === state.user.allianceTag;
+  const canReinforce = (own && !isActive) || ally;
   const dist = Math.hypot(state.village.x - t.x, state.village.y - t.y);
 
   let attackForm = "";
   if (own) {
-    attackForm = '<p class="muted">Das ist dein Dorf.</p>';
+    attackForm = isActive
+      ? '<p class="muted">Das ist dein aktives Dorf.</p>'
+      : '<p class="muted">Das ist eines deiner Dörfer. Du kannst es verstärken.</p>';
   } else if (t.protected) {
     attackForm =
       '<p class="muted">🛡️ Dieser Spieler steht unter Anfängerschutz und kann nicht angegriffen werden.</p>';
@@ -1229,12 +1289,37 @@ function renderVillageDetail() {
     conquestBanner = `<div class="conquest-bar" title="Adelungs-Fortschritt">👑 Treue gebrochen: <b>${progress}/${needed}</b> — noch ${Math.max(0, needed - progress)} Paladin-Angriff(e) bis zur Eroberung.</div>`;
   }
 
+  // Verstärkungs-Formular für eigene weitere Dörfer und Allianzmitglieder.
+  let reinforceForm = "";
+  if (canReinforce) {
+    const rows = Object.entries(meta.UNITS)
+      .filter(([, def]) => !def.scout)
+      .map(([k, def]) => {
+        const max = state.village.units[k]?.count || 0;
+        const empty = max <= 0 ? " is-empty" : "";
+        return `
+          <label class="guard-unit${empty}" title="${esc(def.name)}">
+            <span>${UNIT_ICONS[k] || ""} ${esc(def.name)} <small class="muted">🛡️${def.def}</small></span>
+            <input type="number" min="0" max="${max}" value="0" id="reinf-${k}">
+          </label>`;
+      })
+      .join("");
+    reinforceForm = `
+      <div class="reinforce-box">
+        <h4>🤝 Verstärkung entsenden</h4>
+        <p class="muted small">Schicke Truppen nach ${esc(t.village)} (${dist.toFixed(1)} Felder). Sie verteidigen das Dorf mit und lassen sich jederzeit zurückbeordern. Späher können nicht verstärken.</p>
+        <div class="guard-grid">${rows}</div>
+        <button class="btn primary" onclick="actionReinforce()">🤝 Verstärkung schicken</button>
+      </div>`;
+  }
+
   el.innerHTML = `
     <div class="card">
       <h3 style="margin-top:0">${esc(t.village)} <small class="muted">(${t.x}|${t.y})</small></h3>
       <p>Besitzer: <b class="gold">${esc(t.owner)}</b>${t.alliance ? ` · Allianz: [${esc(t.alliance)}]` : ""} · ${fmtNum(t.points)} Punkte</p>
       ${conquestBanner}
       ${attackForm}
+      ${reinforceForm}
     </div>`;
   window.updateTravelPreview();
 }
@@ -1311,6 +1396,40 @@ window.actionScout = async () => {
   }
 };
 
+window.actionReinforce = async () => {
+  const units = {};
+  for (const k of Object.keys(meta.UNITS)) {
+    const n = Math.floor(Number($("#reinf-" + k)?.value || 0));
+    if (n > 0) units[k] = n;
+  }
+  if (!Object.keys(units).length) {
+    toast("Wähle mindestens eine Einheit.", true);
+    return;
+  }
+  try {
+    const r = await api("/api/reinforce", {
+      x: selectedTile.x,
+      y: selectedTile.y,
+      units,
+    });
+    toast(`Verstärkung unterwegs! Ankunft: ${fmtTime(r.arrival)}`);
+    await refreshState();
+    renderVillageDetail();
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
+
+window.recallReinforce = async (targetId, fromId) => {
+  try {
+    const r = await api("/api/reinforce/recall", { targetId, fromId });
+    toast(`Truppen kehren zurück! Ankunft: ${fmtTime(r.arrival)}`);
+    await refreshState();
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
+
 // Laufenden Angriff/Spähzug abbrechen — Truppen kehren um und marschieren zurück
 window.cancelMove = async (id) => {
   if (!confirm("Diese Bewegung abbrechen? Die Truppen kehren sofort um."))
@@ -1343,6 +1462,21 @@ function renderNodeDetail() {
   };
   const dist = Math.hypot(state.village.x - n.x, state.village.y - n.y);
   const idle = state.village.residents ? state.village.residents.idle : 0;
+  const ambushPct = Math.round((meta.GATHER?.ambushChance ?? 0.3) * 100);
+
+  // Wachen-Auswahl: alle Kampfeinheiten (keine Späher), die im Dorf stehen.
+  const guardInputs = Object.entries(meta.UNITS)
+    .filter(([, def]) => !def.scout)
+    .map(([k, def]) => {
+      const max = state.village.units[k]?.count || 0;
+      const empty = max <= 0 ? " is-empty" : "";
+      return `
+        <label class="guard-unit${empty}" title="${esc(def.name)}">
+          <span>${UNIT_ICONS[k] || ""} ${esc(def.name)} <small class="muted">🛡️${def.def}</small></span>
+          <input type="number" min="0" max="${max}" value="0" id="guard-${k}" ${max ? "" : "disabled"} oninput="updateGatherPreview()">
+        </label>`;
+    })
+    .join("");
 
   el.innerHTML = `
     <div class="card">
@@ -1355,10 +1489,16 @@ function renderNodeDetail() {
         </label>
         <button class="btn primary" ${idle ? "" : "disabled"} onclick="actionGather()">👷 Bewohner losschicken</button>
       </div>
+      <div class="guard-box">
+        <h4 style="margin:.4rem 0">🛡️ Wachen mitschicken <small class="muted">(optional)</small></h4>
+        <p class="muted small">Unterwegs droht mit ~${ambushPct}% ein Räuberüberfall. Ohne ausreichende Wachen sterben Bewohner (sie wachsen danach im Rathaus nach). Wachen kehren mit den Bewohnern heim.</p>
+        <div class="guard-grid">${guardInputs}</div>
+      </div>
       <div class="attack-preview">
         <div><span class="muted">Entfernung</span><b>${dist.toFixed(1)} Felder</b></div>
         <div><span class="muted">Dauer (hin+sammeln+zurück)</span><b id="gatherTime" class="gold">—</b></div>
         <div><span class="muted">Erwartete Beute</span><b id="gatherYield" class="green">0</b></div>
+        <div><span class="muted">Wach-Verteidigung</span><b id="guardDef" class="blue">0</b></div>
       </div>
       ${idle ? "" : '<p class="muted small">Alle Bewohner sind unterwegs. Baue das Rathaus aus, um mehr Bewohner zu bekommen.</p>'}
     </div>`;
@@ -1389,6 +1529,16 @@ window.updateGatherPreview = () => {
     const info = NODE_META[selectedNode.res];
     yEl.textContent = `${fmtNum(yieldAmt)} ${info ? info.res : selectedNode.res}`;
   }
+  // Wach-Verteidigung aus den ausgewählten Truppen summieren.
+  const gEl = $("#guardDef");
+  if (gEl) {
+    let def = 0;
+    for (const k of Object.keys(meta.UNITS)) {
+      const cnt = Number($("#guard-" + k)?.value || 0);
+      if (cnt > 0) def += (meta.UNITS[k].def || 0) * cnt;
+    }
+    gEl.textContent = fmtNum(def);
+  }
 };
 
 window.actionGather = async () => {
@@ -1397,11 +1547,17 @@ window.actionGather = async () => {
     toast("Bitte eine Anzahl Bewohner wählen.", true);
     return;
   }
+  const guards = {};
+  for (const k of Object.keys(meta.UNITS)) {
+    const cnt = Math.floor(Number($("#guard-" + k)?.value || 0));
+    if (cnt > 0) guards[k] = cnt;
+  }
   try {
     const r = await api("/api/gather", {
       x: selectedNode.x,
       y: selectedNode.y,
       workers,
+      guards,
     });
     toast(`Bewohner unterwegs! Rückkehr: ${fmtTime(r.arrival)}`);
     await refreshState();
@@ -2119,6 +2275,39 @@ renderers.berichte = async () => {
       </div>`;
   };
 
+  const unitList = (u) =>
+    u && Object.keys(u).length
+      ? Object.entries(u)
+          .map(([k, n]) => `${fmtNum(n)}× ${meta.UNITS[k]?.name || k}`)
+          .join(", ")
+      : "keine";
+
+  // Räuberüberfall auf eine Sammelmission
+  const raidReport = (r) => {
+    const cls = r.repelled ? "won" : "lost";
+    return `
+      <div class="card report ${cls}" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
+        <div class="rhead"><b>${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+        <div class="rbody hidden">
+          <p class="muted">Vorkommen (${r.x}|${r.y}) · Räuberstärke ${fmtNum(r.banditPower)} vs. Wach-Verteidigung ${fmtNum(r.guardDef)}</p>
+          ${r.residentsKilled ? `<p class="red">🪦 Gefallene Bewohner: <b>${fmtNum(r.residentsKilled)}</b> — sie wachsen im Rathaus nach.</p>` : '<p class="green">Alle Bewohner sind unversehrt.</p>'}
+          <p class="muted small">Verlorene Wachen: ${unitList(r.guardLost)}</p>
+        </div>
+      </div>`;
+  };
+
+  // Verstärkung entsandt oder erhalten
+  const reinforceReport = (r) => {
+    return `
+      <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
+        <div class="rhead"><b>${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+        <div class="rbody hidden">
+          ${r.x != null ? `<p class="muted">Ziel: (${r.x}|${r.y})</p>` : ""}
+          <p><b>🤝 Truppen:</b> ${unitList(r.units)}</p>
+        </div>
+      </div>`;
+  };
+
   const friendReport = (r) => {
     return `
       <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
@@ -2135,6 +2324,8 @@ renderers.berichte = async () => {
           if (r.kind === "Spionage") return spyReport(r);
           if (r.kind === "Handel") return tradeReport(r);
           if (r.kind === "Sammeln") return gatherReport(r);
+          if (r.kind === "Überfall") return raidReport(r);
+          if (r.kind === "Verstärkung") return reinforceReport(r);
           if (r.kind === "Freundschaft") return friendReport(r);
           const iAmAttacker = r.attacker.name === state.user.name;
           const success = iAmAttacker ? r.won : !r.won;
@@ -2172,6 +2363,16 @@ renderers.berichte = async () => {
           ${powerBar(r.attacker.power || 0, r.defender.power || 0)}
           ${lootBlock}
           ${conquestBlock}
+          ${r.defender.residentsLost ? `<p class="red">🪦 Gefallene Bewohner beim Verteidiger: <b>${fmtNum(r.defender.residentsLost)}</b> — wachsen im Rathaus nach.</p>` : ""}
+          ${
+            r.defender.garrisonLost
+              ? `<p class="muted small">Verlorene Verstärkung: ${Object.entries(
+                  r.defender.garrisonLost,
+                )
+                  .map(([k, n]) => `${fmtNum(n)}× ${meta.UNITS[k]?.name || k}`)
+                  .join(", ")}</p>`
+              : ""
+          }
           <div class="grid2">
             <div>${unitTable("Angreifer", r.attacker.sent, r.attacker.lost)}</div>
             <div>${unitTable("Verteidiger", r.defender.had, r.defender.lost)}</div>
@@ -2203,7 +2404,7 @@ renderers.rangliste = async () => {
     <tr ${p.name === state.user.name ? 'style="color:var(--gold)"' : ""}>
       <td class="num">${i + 1}.</td>
       <td><b>${esc(p.name)}</b>${p.alliance ? ` <span class="muted">[${esc(p.alliance)}]</span>` : ""}</td>
-      <td>(${p.x}|${p.y})</td>
+      <td><a href="#" class="coord-link" title="Auf der Karte anzeigen" onclick="showOnMap(${p.x}, ${p.y}); return false;">(${p.x}|${p.y})</a></td>
       <td class="num">${fmtNum(p.points)}</td>
       <td>${p.name === state.user.name || p.friend ? "" : `<button class="btn small" onclick="friendRequestFor('${esc(p.name)}')">🤝 Freund</button>`}</td>
     </tr>`,

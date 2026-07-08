@@ -248,6 +248,25 @@ export function residentsCap(rathausLevel) {
   return 4 + 4 * (rathausLevel || 0);
 }
 
+// Gefallene Bewohner werden im Rathaus nachgezogen: 1 Stück je Intervall,
+// bis wieder alle da sind. 5 Min vor SPEED (skaliert wie alle anderen Zeiten).
+export const RESIDENT_REGEN_MS = 5 * 60_000;
+export function residentRegenMs() {
+  return Math.max(1000, Math.round(RESIDENT_REGEN_MS / SPEED));
+}
+
+// ---------- Räuberüberfälle am Vorkommen ----------
+// Sammelmissionen können unterwegs von Räubern überfallen werden. Mitgeschickte
+// Wachen (Truppen) verteidigen die Bewohner; sind sie zu schwach, sterben
+// Bewohner (die dann im Rathaus regenerieren) und Wachen fallen.
+export const GATHER_AMBUSH_CHANCE = 0.3; // Wahrscheinlichkeit eines Überfalls pro Mission
+// Kampfkraft der Räuberbande – wächst mit Ergiebigkeit und Gruppengröße.
+export function banditPower(richness, workers) {
+  return Math.round(
+    (6 + 5 * (richness || 1)) * Math.sqrt(Math.max(1, workers)),
+  );
+}
+
 // Reisezeit der Arbeiter für eine Strecke (eine Richtung).
 export function gatherTravelMs(dist) {
   return Math.max(

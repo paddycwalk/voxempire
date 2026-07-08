@@ -1600,6 +1600,48 @@ tr.unit-locked {
 .red {
   color: var(--red);
 }
+.blue {
+  color: #4aa3c9;
+}
+
+/* Wachen (Sammelmission) & Verstärkung */
+.guard-box,
+.reinforce-box {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px dashed color-mix(in srgb, #2e8b8b 45%, var(--border));
+  background: color-mix(in srgb, #2e8b8b 7%, transparent);
+}
+.reinforce-box h4,
+.guard-box h4 {
+  margin: 0 0 4px;
+}
+.guard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 6px 10px;
+  margin: 8px 0;
+}
+.guard-unit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+}
+.guard-unit.is-empty {
+  opacity: 0.5;
+}
+.guard-unit input {
+  width: 64px;
+}
+.res-wounded {
+  color: var(--red);
+}
 
 .formrow {
   display: flex;
@@ -1945,4 +1987,17 @@ tr.unit-locked {
     right: max(10px, env(safe-area-inset-right));
     width: auto;
   }
+}
+
+/* Klickbare Koordinaten in der Rangliste */
+.coord-link {
+  color: var(--gold);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--gold);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.coord-link:hover {
+  filter: brightness(1.2);
+  border-bottom-style: solid;
 }

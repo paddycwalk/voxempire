@@ -16,6 +16,8 @@ import {
   WORKER_SPEED,
   CONQUEST_ATTACKS,
   gatherWorkMs,
+  residentRegenMs,
+  GATHER_AMBUSH_CHANCE,
 } from "./server/gamedata.js";
 import * as game from "./server/game.js";
 
@@ -62,6 +64,10 @@ const routes = {
         workerSpeedEff: WORKER_SPEED * SPEED,
         workMs: gatherWorkMs(),
         yieldPerWorker: 12 * SPEED,
+        ambushChance: GATHER_AMBUSH_CHANCE,
+      },
+      RESIDENT: {
+        regenMs: residentRegenMs(),
       },
     }),
   },
@@ -102,7 +108,15 @@ const routes = {
   },
   "POST /api/gather": {
     auth: true,
-    fn: (u, b) => game.gather(u, Number(b.x), Number(b.y), b.workers),
+    fn: (u, b) => game.gather(u, Number(b.x), Number(b.y), b.workers, b.guards),
+  },
+  "POST /api/reinforce": {
+    auth: true,
+    fn: (u, b) => game.reinforce(u, Number(b.x), Number(b.y), b.units),
+  },
+  "POST /api/reinforce/recall": {
+    auth: true,
+    fn: (u, b) => game.recallReinforcement(u, b.targetId, b.fromId),
   },
 
   "GET  /api/map": {
