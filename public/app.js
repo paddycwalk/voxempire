@@ -1176,12 +1176,23 @@ function renderVillageDetail() {
   } else {
     const inputs = Object.entries(meta.UNITS)
       .filter(([, def]) => !def.scout)
-      .map(
-        ([k, def]) => `
-      <label>${def.name} (max. ${state.village.units[k].count})
-        <input type="number" min="0" max="${state.village.units[k].count}" value="0" id="atk-${k}" oninput="updateTravelPreview()">
-      </label>`,
-      )
+      .map(([k, def]) => {
+        const max = state.village.units[k].count;
+        const empty = max <= 0 ? " is-empty" : "";
+        return `
+      <label class="atk-unit${empty}" for="atk-${k}" title="${def.name}">
+        <span class="atk-portrait">${UNIT_ICONS[k] || ""}</span>
+        <span class="atk-info">
+          <b>${def.name}</b>
+          <small class="atk-stats">⚔️${def.off} · 🛡️${def.def} · 🐎${def.speed} · 🎒${def.carry}</small>
+          <small class="atk-avail">verfügbar: <b>${fmtNum(max)}</b></small>
+        </span>
+        <span class="atk-controls">
+          <input type="number" min="0" max="${max}" value="0" id="atk-${k}" ${max ? "" : "disabled"} oninput="updateTravelPreview()">
+          <button type="button" class="btn small" onclick="setAtkMax('${k}', ${max})" ${max ? "" : "disabled"}>Max</button>
+        </span>
+      </label>`;
+      })
       .join("");
     const scoutMax = state.village.units.spaeher?.count || 0;
     const scoutForm = `
@@ -1197,7 +1208,8 @@ function renderVillageDetail() {
         ${scoutMax ? "" : '<p class="muted small">Du hast keine Späher. Bilde sie in der Kaserne aus.</p>'}
       </div>`;
     attackForm = `
-      <div class="unit-inputs">${inputs}</div>
+      <h4 class="picker-title">⚔️ Truppen auswählen</h4>
+      <div class="unit-picker">${inputs}</div>
       <div class="attack-preview">
         <div><span class="muted">Entfernung</span><b>${dist.toFixed(1)} Felder</b></div>
         <div><span class="muted">Reisezeit</span><b id="travelPreview" class="gold">—</b></div>
@@ -1226,6 +1238,14 @@ function renderVillageDetail() {
     </div>`;
   window.updateTravelPreview();
 }
+
+window.setAtkMax = (k, max) => {
+  const el = $("#atk-" + k);
+  if (el) {
+    el.value = max;
+    window.updateTravelPreview();
+  }
+};
 
 window.updateTravelPreview = () => {
   const el = $("#travelPreview");
