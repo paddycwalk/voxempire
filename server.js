@@ -14,6 +14,7 @@ import {
   UNITS,
   WORLD_SIZE,
   WORKER_SPEED,
+  CONQUEST_ATTACKS,
   gatherWorkMs,
 } from "./server/gamedata.js";
 import * as game from "./server/game.js";
@@ -56,6 +57,7 @@ const routes = {
       UNITS,
       SPEED,
       WORLD_SIZE,
+      CONQUEST_ATTACKS,
       GATHER: {
         workerSpeedEff: WORKER_SPEED * SPEED,
         workMs: gatherWorkMs(),
@@ -106,7 +108,11 @@ const routes = {
   "GET  /api/map": {
     auth: true,
     fn: (u, _, __, q) =>
-      game.mapView(Number(q.get("x")), Number(q.get("y")), 6),
+      game.mapView(Number(q.get("x")), Number(q.get("y")), 6, u),
+  },
+  "POST /api/village/select": {
+    auth: true,
+    fn: (u, b) => game.selectVillage(u, b.id),
   },
   "GET  /api/ranking": { auth: true, fn: (u) => game.ranking(u) },
   "GET  /api/reports": { auth: true, fn: (u) => game.getReports(u) },

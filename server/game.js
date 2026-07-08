@@ -20,6 +20,7 @@ import {
   MAX_TRAIN_QUEUE,
   MAX_REPORTS,
   MAX_CHAT,
+  CONQUEST_ATTACKS,
   RES,
   RES_NAMES,
   BUILDINGS,
@@ -147,6 +148,7 @@ function createVillage(ownerName) {
     queue: [], // Bauaufträge: { b, toLevel, done }
     trainQueue: [], // Ausbildung:  { unit, count, done }
     protectedUntil: Date.now() + PROTECTION_MS,
+    conquest: null, // Adelungs-Fortschritt: { by, progress } oder null
   };
   db.villages[id] = village;
   db.world[`${x},${y}`] = id;
@@ -173,6 +175,32 @@ function findFreeTile() {
     if (attempt % 50 === 49) radius += 2;
   }
   fail("Kein freier Bauplatz gefunden.");
+}
+
+// Alle Dörfer, die einem Spieler gehören (Startdorf + eroberte Dörfer).
+function ownedVillages(user) {
+  const key = user.name.toLowerCase();
+  return Object.values(db.villages).filter((v) => v.owner === key);
+}
+
+// Gesamtpunkte eines Spielers über all seine Dörfer.
+function userPoints(user) {
+  let p = 0;
+  for (const v of ownedVillages(user)) {
+    touchVillage(v);
+    p += villagePoints(v);
+  }
+  return p;
+}
+
+// Aktives Dorf für Bauen/Ausbilden/Angreifen wechseln (nur eigene Dörfer).
+export function selectVillage(user, id) {
+  const v = db.villages[id];
+  if (!v || v.owner !== user.name.toLowerCase())
+    fail("Dieses Dorf gehört dir nicht.");
+  user.villageId = id;
+  touchVillage(v);
+  return getState(user);
 }
 
 // Zentrale Lazy-Simulation: verstrichene Zeit auf ein Dorf anwenden.
@@ -547,11 +575,22 @@ function resolveAttack(ev, now) {
     }
   }
 
+  // Paladin-Adelung: Überlebt ein Paladin einen gewonnenen Angriff, sinkt die
+  // Treue des Dorfes. Nach CONQUEST_ATTACKS Malen wechselt der Besitzer.
+  // Namen der Beteiligten vor einem möglichen Besitzerwechsel festhalten.
+  const attacker = db.users[av.owner];
+  const defenderUser = db.users[dv.owner];
+  const paladinSurvived = (survivors.paladin || 0) > 0;
+  let conquest = null;
+  if (won && paladinSurvived) {
+    conquest = advanceConquest(av, dv, defenderUser, now);
+  }
+
   const report = {
     time: now,
     kind: "Kampf",
     attacker: {
-      name: db.users[av.owner].name,
+      name: attacker.name,
       village: av.name,
       x: av.x,
       y: av.y,
@@ -560,7 +599,7 @@ function resolveAttack(ev, now) {
       power: Math.round(atk),
     },
     defender: {
-      name: db.users[dv.owner].name,
+      name: defenderUser.name,
       village: dv.name,
       x: dv.x,
       y: dv.y,
@@ -572,19 +611,30 @@ function resolveAttack(ev, now) {
     won,
     loot,
     capacity,
+    conquest, // { progress, needed, conquered } oder null
   };
-  addReport(db.users[av.owner], {
+  addReport(attacker, {
     ...report,
-    title: won ? `Sieg gegen ${dv.name}` : `Niederlage gegen ${dv.name}`,
+    title: conquest?.conquered
+      ? `👑 ${dv.name} erobert!`
+      : conquest
+        ? `Sieg gegen ${dv.name} — Treue ${conquest.progress}/${conquest.needed}`
+        : won
+          ? `Sieg gegen ${dv.name}`
+          : `Niederlage gegen ${dv.name}`,
   });
-  addReport(db.users[dv.owner], {
+  addReport(defenderUser, {
     ...report,
-    title: won
-      ? `${av.name} hat dich geplündert!`
-      : `Angriff von ${av.name} abgewehrt`,
+    title: conquest?.conquered
+      ? `😱 ${attacker.name} hat ${dv.name} erobert!`
+      : conquest
+        ? `${attacker.name} adelt dein Dorf — Treue ${conquest.progress}/${conquest.needed}`
+        : won
+          ? `${av.name} hat dich geplündert!`
+          : `Angriff von ${av.name} abgewehrt`,
   });
 
-  if (won) questStat(db.users[av.owner], "attacksWon", 1);
+  if (won) questStat(attacker, "attacksWon", 1);
 
   if (Object.keys(survivors).length) {
     const back = travelTimeMs(Math.hypot(av.x - dv.x, av.y - dv.y), survivors);
@@ -598,6 +648,42 @@ function resolveAttack(ev, now) {
       units: survivors,
       loot,
     });
+  }
+}
+
+// Adelungs-Fortschritt eines Dorfes erhöhen; bei Erreichen der Schwelle erobern.
+// Greift ein neuer Angreifer mit Paladin an, beginnt die Treue-Zählung von vorn.
+function advanceConquest(av, dv, defenderUser, now) {
+  const byKey = av.owner;
+  if (!dv.conquest || dv.conquest.by !== byKey) {
+    dv.conquest = { by: byKey, progress: 0 };
+  }
+  dv.conquest.progress += 1;
+  const needed = CONQUEST_ATTACKS;
+  const progress = dv.conquest.progress;
+  if (progress >= needed) {
+    conquerVillage(av, dv, defenderUser, now);
+    return { progress: needed, needed, conquered: true };
+  }
+  return { progress, needed, conquered: false };
+}
+
+// Besitz eines Dorfes an den Angreifer übertragen. Verliert der Verteidiger
+// dabei sein aktives Dorf, erhält er ein verbliebenes oder ein frisches Dorf,
+// damit sein Konto nie ohne Dorf dasteht.
+function conquerVillage(av, dv, defenderUser, now) {
+  const attacker = db.users[av.owner];
+  dv.owner = attacker.name.toLowerCase();
+  dv.conquest = null;
+  dv.protectedUntil = 0;
+  if (defenderUser.villageId === dv.id) {
+    const remaining = ownedVillages(defenderUser);
+    if (remaining.length) {
+      defenderUser.villageId = remaining[0].id;
+    } else {
+      const fresh = createVillage(defenderUser.name);
+      defenderUser.villageId = fresh.id;
+    }
   }
 }
 
@@ -1004,7 +1090,7 @@ export function allianceInfo(user) {
         touchVillage(v);
         return {
           name: u.name,
-          points: villagePoints(v),
+          points: userPoints(u),
           x: v.x,
           y: v.y,
           online: Date.now() - u.lastSeen < 5 * 60_000,
@@ -1022,9 +1108,7 @@ export function allianceList() {
       name: a.name,
       memberCount: a.members.length,
       points: a.members.reduce((sum, m) => {
-        const v = db.villages[db.users[m].villageId];
-        touchVillage(v);
-        return sum + villagePoints(v);
+        return sum + userPoints(db.users[m]);
       }, 0),
     }))
     .sort((x, y) => y.points - x.points);
@@ -1315,7 +1399,8 @@ export function claimQuest(user, id) {
 
 // ---------------- Karte, Rangliste, State ----------------
 
-export function mapView(cx, cy, radius = 6) {
+export function mapView(cx, cy, radius = 6, user = null) {
+  const myKey = user ? user.name.toLowerCase() : null;
   const tiles = [];
   for (const [key, vid] of Object.entries(db.world)) {
     const [x, y] = key.split(",").map(Number);
@@ -1324,6 +1409,11 @@ export function mapView(cx, cy, radius = 6) {
     const owner = db.users[v.owner];
     const alliance = owner.allianceId ? db.alliances[owner.allianceId] : null;
     touchVillage(v);
+    // Adelungs-Fortschritt nur dem Angreifer selbst zeigen.
+    const conquest =
+      myKey && v.conquest && v.conquest.by === myKey
+        ? { progress: v.conquest.progress, needed: CONQUEST_ATTACKS }
+        : null;
     tiles.push({
       x,
       y,
@@ -1332,6 +1422,7 @@ export function mapView(cx, cy, radius = 6) {
       alliance: alliance ? alliance.tag : null,
       points: villagePoints(v),
       protected: v.protectedUntil > Date.now(),
+      conquest,
     });
   }
   // Rohstoffvorkommen im Sichtfenster (nur auf freien Feldern) mitliefern.
@@ -1358,7 +1449,8 @@ export function ranking(user) {
       return {
         name: u.name,
         alliance: a ? a.tag : null,
-        points: villagePoints(v),
+        points: userPoints(u),
+        villages: ownedVillages(u).length,
         x: v.x,
         y: v.y,
         friend: myFriends.has(u.name.toLowerCase()),
@@ -1545,6 +1637,19 @@ export function getState(user) {
       protectedUntil: v.protectedUntil,
       points: villagePoints(v),
     },
+    villages: ownedVillages(user)
+      .map((vv) => {
+        touchVillage(vv, now);
+        return {
+          id: vv.id,
+          name: vv.name,
+          x: vv.x,
+          y: vv.y,
+          points: villagePoints(vv),
+          active: vv.id === v.id,
+        };
+      })
+      .sort((a, b) => b.points - a.points),
     movements: { incoming, outgoing },
     unreadReports: user.reports.filter((r) => !r.read).length,
     pendingFriendRequests: db.friendRequests.filter(

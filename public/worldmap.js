@@ -7,28 +7,28 @@
 // Scrollen gleich aussieht.
 // Öffentliche API: renderWorldMap(tiles, center, R, state, selected)
 // ============================================================
-'use strict';
+"use strict";
 
 const WM = {
-  parch:   '#e7d3a4', // Pergament hell
-  parchD:  '#d8bd85', // Pergament mittel
-  parchDD: '#b8975a', // Pergament dunkel (Alterung)
-  ink:     '#5a3d22', // Zeichentusche braun
-  inkD:    '#3a2814', // Tusche dunkel
-  leaf:    '#5f7338', // Wald
-  leafD:   '#47562a',
-  trunk:   '#6b4a2a',
-  rock:    '#b39c72', // Berg
-  rockD:   '#8a734d',
-  snow:    '#f2e7c8',
-  sea:     '#7ba0a6', // Meer (gedämpftes Türkis)
-  seaD:    '#5c848c',
-  wave:    '#3f6a72',
-  stone:   '#cbb388', // Burgmauer
-  roof:    '#a04c40', // Dächer
-  roofD:   '#7c3a31',
-  gold:    '#e8b64c', // eigenes Dorf
-  blue:    '#6ea8dc', // Allianz
+  parch: "#e7d3a4", // Pergament hell
+  parchD: "#d8bd85", // Pergament mittel
+  parchDD: "#b8975a", // Pergament dunkel (Alterung)
+  ink: "#5a3d22", // Zeichentusche braun
+  inkD: "#3a2814", // Tusche dunkel
+  leaf: "#5f7338", // Wald
+  leafD: "#47562a",
+  trunk: "#6b4a2a",
+  rock: "#b39c72", // Berg
+  rockD: "#8a734d",
+  snow: "#f2e7c8",
+  sea: "#7ba0a6", // Meer (gedämpftes Türkis)
+  seaD: "#5c848c",
+  wave: "#3f6a72",
+  stone: "#cbb388", // Burgmauer
+  roof: "#a04c40", // Dächer
+  roofD: "#7c3a31",
+  gold: "#e8b64c", // eigenes Dorf
+  blue: "#6ea8dc", // Allianz
 };
 
 // ---------- Deterministisches Wert-Rauschen (fBm) ----------
@@ -37,16 +37,27 @@ function wmHash(x, y) {
   return n - Math.floor(n);
 }
 function wmNoise(x, y) {
-  const xi = Math.floor(x), yi = Math.floor(y);
-  const xf = x - xi, yf = y - yi;
-  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
-  const a = wmHash(xi, yi), b = wmHash(xi + 1, yi);
-  const c = wmHash(xi, yi + 1), d = wmHash(xi + 1, yi + 1);
+  const xi = Math.floor(x),
+    yi = Math.floor(y);
+  const xf = x - xi,
+    yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf),
+    v = yf * yf * (3 - 2 * yf);
+  const a = wmHash(xi, yi),
+    b = wmHash(xi + 1, yi);
+  const c = wmHash(xi, yi + 1),
+    d = wmHash(xi + 1, yi + 1);
   return a * (1 - u) * (1 - v) + b * u * (1 - v) + c * (1 - u) * v + d * u * v;
 }
 function wmFbm(x, y) {
-  let t = 0, amp = 0.5, f = 1;
-  for (let i = 0; i < 4; i++) { t += amp * wmNoise(x * f, y * f); f *= 2; amp *= 0.5; }
+  let t = 0,
+    amp = 0.5,
+    f = 1;
+  for (let i = 0; i < 4; i++) {
+    t += amp * wmNoise(x * f, y * f);
+    f *= 2;
+    amp *= 0.5;
+  }
   return t;
 }
 // Höhe (0..1) und Waldwert (0..1) pro Weltfeld
@@ -62,7 +73,11 @@ function wmTree(cx, cy, s) {
   </g>`;
 }
 function wmForestGlyph(cx, cy) {
-  return wmTree(cx - 9, cy + 4, 1.05) + wmTree(cx + 8, cy + 5, 0.95) + wmTree(cx, cy - 3, 1.25);
+  return (
+    wmTree(cx - 9, cy + 4, 1.05) +
+    wmTree(cx + 8, cy + 5, 0.95) +
+    wmTree(cx, cy - 3, 1.25)
+  );
 }
 function wmMountainGlyph(cx, cy) {
   return `<g transform="translate(${cx.toFixed(1)},${cy.toFixed(1)})">
@@ -73,10 +88,10 @@ function wmMountainGlyph(cx, cy) {
   </g>`;
 }
 function wmWaveGlyph(cx, cy) {
-  let rows = '';
+  let rows = "";
   for (let r = -1; r <= 1; r++) {
     const y = cy + r * 11 + 2;
-    const off = (r & 1) ? 7 : 0;
+    const off = r & 1 ? 7 : 0;
     rows += `<path d="M${(cx - 18 + off).toFixed(1)},${y.toFixed(1)} q4,-4 8,0 t8,0 t8,0" fill="none" stroke="${WM.wave}" stroke-width="1" stroke-linecap="round" opacity="0.5"/>`;
   }
   return rows;
@@ -124,7 +139,7 @@ function wmTown(cx, cy, banner) {
   const b = banner
     ? `<line x1="0" y1="-9" x2="0" y2="-22" stroke="${WM.ink}" stroke-width="1.2"/>
        <path d="M0,-22 L10,-20 L0,-16 Z" fill="${banner}" stroke="${WM.ink}" stroke-width="0.5"/>`
-    : '';
+    : "";
   return `<g transform="translate(${cx},${cy})">
     <ellipse cx="0" cy="14" rx="20" ry="4" fill="#00000020"/>
     ${wmChurch(-2, 7)}
@@ -138,10 +153,14 @@ function wmTown(cx, cy, banner) {
 // ---------- Rohstoffvorkommen (Sammelplätze auf der Karte) ----------
 // Klickbare Felder, auf die Bewohner zum Sammeln geschickt werden.
 function wmResourceGlyph(cx, cy, res) {
-  if (res === 'holz') {
-    return wmTree(cx - 8, cy + 5, 0.9) + wmTree(cx + 8, cy + 6, 0.8) + wmTree(cx, cy - 1, 1.1);
+  if (res === "holz") {
+    return (
+      wmTree(cx - 8, cy + 5, 0.9) +
+      wmTree(cx + 8, cy + 6, 0.8) +
+      wmTree(cx, cy - 1, 1.1)
+    );
   }
-  if (res === 'stein') {
+  if (res === "stein") {
     return `<g transform="translate(${cx.toFixed(1)},${cy.toFixed(1)})">
       <path d="M-13,9 L-6,-6 L2,3 L7,-8 L15,9 Z" fill="${WM.rock}" stroke="${WM.ink}" stroke-width="0.9" stroke-linejoin="round"/>
       <path d="M-6,-6 L-3,-1 L-9,5 Z" fill="${WM.rockD}" opacity="0.6"/>
@@ -158,7 +177,7 @@ function wmResourceGlyph(cx, cy, res) {
 
 // Kleine Punkte zeigen die Ergiebigkeit (1..3) eines Vorkommens.
 function wmRichnessPips(cx, cy, richness, col) {
-  let s = '';
+  let s = "";
   for (let i = 0; i < richness; i++) {
     const x = cx - (richness - 1) * 3.5 + i * 7;
     s += `<circle cx="${x.toFixed(1)}" cy="${cy.toFixed(1)}" r="1.9" fill="${col}" stroke="${WM.inkD}" stroke-width="0.5"/>`;
@@ -190,7 +209,7 @@ function wmMoveGlyph(x1, y1, x2, y2, col, frac, remSec, label) {
   const dur = Math.max(0.5, remSec).toFixed(1);
   const cap = label
     ? `<text x="0" y="-12" text-anchor="middle" font-size="9" font-family="Georgia,serif" font-weight="700" fill="${col}" stroke="#fff" stroke-width="2.4" paint-order="stroke" opacity="0.95">${label}</text>`
-    : '';
+    : "";
   const marker = `<g>
       <animateMotion dur="${dur}s" fill="freeze" rotate="auto"
         path="M ${cx.toFixed(1)},${cy.toFixed(1)} L ${x2.toFixed(1)},${y2.toFixed(1)}"/>
@@ -204,23 +223,23 @@ function wmMoveGlyph(x1, y1, x2, y2, col, frac, remSec, label) {
           path="M ${cx.toFixed(1)},${cy.toFixed(1)} L ${x2.toFixed(1)},${y2.toFixed(1)}"/>
         ${cap}
       </g>`
-    : '';
+    : "";
   return `<g class="wm-move">${line}${goal}${marker}${capMarker}</g>`;
 }
 
 // ---------- Kompassrose ----------
 function wmCompass(cx, cy, r) {
   const pt = (ang, rad) => {
-    const a = (ang - 90) * Math.PI / 180;
+    const a = ((ang - 90) * Math.PI) / 180;
     return `${(cx + Math.cos(a) * rad).toFixed(1)},${(cy + Math.sin(a) * rad).toFixed(1)}`;
   };
-  let star = '';
+  let star = "";
   for (let i = 0; i < 8; i++) {
     const a = i * 45;
     const long = i % 2 === 0;
     const rad = long ? r : r * 0.5;
     const w = long ? 6 : 4;
-    const fill = (i % 4 === 0) ? WM.ink : WM.parchDD;
+    const fill = i % 4 === 0 ? WM.ink : WM.parchDD;
     star += `<polygon points="${pt(a, rad)} ${pt(a + w, rad * 0.34)} ${pt(a - w, rad * 0.34)}" fill="${fill}" stroke="${WM.inkD}" stroke-width="0.4"/>`;
   }
   return `<g opacity="0.92">
@@ -235,7 +254,8 @@ function wmCompass(cx, cy, r) {
 
 // ---------- Hauptfunktion ----------
 function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
-  const CELL = 58, M = 46;
+  const CELL = 58,
+    M = 46;
   const N = 2 * R + 1;
   const inner = N * CELL;
   const W = inner + 2 * M;
@@ -248,12 +268,17 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
   const myName = state.user.name;
   const myTag = state.user.allianceTag;
 
-  let sea = '', land = '', vills = '', ruler = '';
+  let sea = "",
+    land = "",
+    vills = "",
+    ruler = "";
 
   for (let dy = -R; dy <= R; dy++) {
     for (let dx = -R; dx <= R; dx++) {
-      const wx = center.x + dx, wy = center.y + dy;
-      const cx = px(dx), cy = px(dy);
+      const wx = center.x + dx,
+        wy = center.y + dy;
+      const cx = px(dx),
+        cy = px(dy);
       const t = byPos[`${wx},${wy}`];
 
       if (t) {
@@ -261,10 +286,10 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
         land += wmGrassGlyph(cx, cy);
       } else {
         const e = wmElev(wx, wy);
-        if (e < 0.40) {
+        if (e < 0.4) {
           sea += `<rect x="${(edge(dx) - 1).toFixed(1)}" y="${(edge(dy) - 1).toFixed(1)}" width="${CELL + 2}" height="${CELL + 2}" fill="url(#wmSea)"/>`;
           sea += wmWaveGlyph(cx, cy);
-        } else if (e > 0.70) {
+        } else if (e > 0.7) {
           land += wmMountainGlyph(cx, cy);
         } else if (wmForest(wx, wy) > 0.58) {
           land += wmForestGlyph(cx, cy);
@@ -278,31 +303,48 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
   // Dörfer + Beschriftung (über dem Terrain)
   for (let dy = -R; dy <= R; dy++) {
     for (let dx = -R; dx <= R; dx++) {
-      const wx = center.x + dx, wy = center.y + dy;
+      const wx = center.x + dx,
+        wy = center.y + dy;
       const t = byPos[`${wx},${wy}`];
       if (!t) continue;
-      const cx = px(dx), cy = px(dy);
+      const cx = px(dx),
+        cy = px(dy);
       const own = t.owner === myName;
       const ally = !own && myTag && t.alliance === myTag;
       const isSel = selected && selected.x === t.x && selected.y === t.y;
 
       let glyph, col;
-      if (own) { glyph = wmCastle(cx, cy - 2, WM.gold); col = WM.gold; }
-      else if (ally) { glyph = wmTown(cx, cy, WM.blue); col = WM.blue; }
-      else { glyph = wmTown(cx, cy, t.protected ? '#9fb0c4' : WM.roof); col = WM.inkD; }
+      if (own) {
+        glyph = wmCastle(cx, cy - 2, WM.gold);
+        col = WM.gold;
+      } else if (ally) {
+        glyph = wmTown(cx, cy, WM.blue);
+        col = WM.blue;
+      } else {
+        glyph = wmTown(cx, cy, t.protected ? "#9fb0c4" : WM.roof);
+        col = WM.inkD;
+      }
 
       const shield = t.protected
         ? `<path d="M${cx},${cy - 20} l9,3 v6 q0,7 -9,11 q-9,-4 -9,-11 v-6 Z" fill="#cfd8e6" stroke="${WM.ink}" stroke-width="1" opacity="0.9"/>
            <path d="M${cx},${cy - 20} l9,3 v6 q0,7 -9,11 Z" fill="#aab8cc" opacity="0.9"/>`
-        : '';
+        : "";
       const ring = isSel
         ? `<circle cx="${cx}" cy="${cy}" r="26" fill="none" stroke="${WM.gold}" stroke-width="2.2"/>`
-        : '';
+        : "";
+
+      // Adelungs-Fortschritt (eigene Paladin-Angriffe): kleines Krönchen-Banner
+      const conq = t.conquest
+        ? `<g transform="translate(${cx},${(cy - 30).toFixed(1)})">
+             <rect x="-15" y="-9" width="30" height="15" rx="4" fill="#3a2626" stroke="${WM.gold}" stroke-width="1"/>
+             <text x="0" y="2.5" text-anchor="middle" font-size="10" font-family="Georgia,serif" font-weight="700" fill="${WM.gold}">👑${t.conquest.progress}/${t.conquest.needed}</text>
+           </g>`
+        : "";
 
       const name = esc(t.owner);
       vills += `<g class="wm-village" onclick='selectTile(${JSON.stringify(t)})'>
         <rect class="wm-hit" x="${(cx - CELL / 2).toFixed(1)}" y="${(cy - CELL / 2).toFixed(1)}" width="${CELL}" height="${CELL}" rx="4" fill="transparent"/>
-        ${ring}${glyph}${shield}
+        ${ring}${glyph}${shield}${conq}
         <g class="wm-label">
           <text x="${cx}" y="${(cy + 27).toFixed(1)}" text-anchor="middle" font-size="10.5" font-family="Georgia,'Times New Roman',serif" font-style="italic" fill="#fff" stroke="#fff" stroke-width="2.6" stroke-linejoin="round" opacity="0.7">${name}</text>
           <text x="${cx}" y="${(cy + 27).toFixed(1)}" text-anchor="middle" font-size="10.5" font-family="Georgia,'Times New Roman',serif" font-style="italic" fill="${col}" font-weight="600">${name}</text>
@@ -312,19 +354,21 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
   }
 
   // Rohstoffvorkommen (klickbare Sammelplätze) über dem Terrain, unter den Bewegungen
-  const NODE_COL = { holz: '#4d7a2e', stein: '#7d848f', eisen: '#c9962f' };
-  const NODE_LABEL = { holz: 'Wald', stein: 'Steinbruch', eisen: 'Eisenader' };
-  let nodesLayer = '';
-  for (const n of (nodes || [])) {
-    const dx = n.x - center.x, dy = n.y - center.y;
+  const NODE_COL = { holz: "#4d7a2e", stein: "#7d848f", eisen: "#c9962f" };
+  const NODE_LABEL = { holz: "Wald", stein: "Steinbruch", eisen: "Eisenader" };
+  let nodesLayer = "";
+  for (const n of nodes || []) {
+    const dx = n.x - center.x,
+      dy = n.y - center.y;
     if (Math.abs(dx) > R || Math.abs(dy) > R) continue;
-    const cx = px(dx), cy = px(dy);
+    const cx = px(dx),
+      cy = px(dy);
     const col = NODE_COL[n.res] || WM.inkD;
     const isSel = selNode && selNode.x === n.x && selNode.y === n.y;
     const ring = isSel
       ? `<circle cx="${cx}" cy="${cy}" r="24" fill="none" stroke="${col}" stroke-width="2.4"/>`
-      : '';
-    const label = NODE_LABEL[n.res] || 'Vorkommen';
+      : "";
+    const label = NODE_LABEL[n.res] || "Vorkommen";
     nodesLayer += `<g class="wm-node" onclick='selectNode(${JSON.stringify(n)})'>
       <rect class="wm-hit" x="${(cx - CELL / 2).toFixed(1)}" y="${(cy - CELL / 2).toFixed(1)}" width="${CELL}" height="${CELL}" rx="4" fill="transparent"/>
       ${ring}${wmResourceGlyph(cx, cy, n.res)}
@@ -342,31 +386,45 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
   const wxp = (wx) => M + (wx - center.x + R + 0.5) * CELL;
   const wyp = (wy) => M + (wy - center.y + R + 0.5) * CELL;
   const now = (state && state.serverTime) || Date.now();
-  const moveCol = { attack: '#c0392b', scout: '#3b6ea5', return: '#4b7a3a', gather: '#b8860b', gatherReturn: '#4b7a3a' };
-  const unitTotal = (u) => u ? Object.values(u).reduce((a, b) => a + (b || 0), 0) : 0;
-  let moves = '';
+  const moveCol = {
+    attack: "#c0392b",
+    scout: "#3b6ea5",
+    return: "#4b7a3a",
+    gather: "#b8860b",
+    gatherReturn: "#4b7a3a",
+  };
+  const unitTotal = (u) =>
+    u ? Object.values(u).reduce((a, b) => a + (b || 0), 0) : 0;
+  let moves = "";
   const mv = (state && state.movements) || { incoming: [], outgoing: [] };
   const drawMove = (m, incoming) => {
     if (m.fromX == null || m.toX == null || m.toX === undefined) return;
-    const x1 = wxp(m.fromX), y1 = wyp(m.fromY);
-    const x2 = wxp(m.toX), y2 = wyp(m.toY);
-    const total = m.start ? (m.at - m.start) : 0;
-    const frac = total > 0 ? Math.min(1, Math.max(0, (now - m.start) / total)) : 0;
+    const x1 = wxp(m.fromX),
+      y1 = wyp(m.fromY);
+    const x2 = wxp(m.toX),
+      y2 = wyp(m.toY);
+    const total = m.start ? m.at - m.start : 0;
+    const frac =
+      total > 0 ? Math.min(1, Math.max(0, (now - m.start) / total)) : 0;
     const remSec = Math.max(0, (m.at - now) / 1000);
-    const col = incoming ? moveCol.attack : (moveCol[m.type] || moveCol.attack);
+    const col = incoming ? moveCol.attack : moveCol[m.type] || moveCol.attack;
     const label = incoming
-      ? ''
-      : (m.type === 'gather' ? String(m.workers || '')
-        : m.type === 'return' || m.type === 'gatherReturn' ? ''
-        : String(unitTotal(m.units) || ''));
+      ? ""
+      : m.type === "gather"
+        ? String(m.workers || "")
+        : m.type === "return" || m.type === "gatherReturn"
+          ? ""
+          : String(unitTotal(m.units) || "");
     moves += wmMoveGlyph(x1, y1, x2, y2, col, frac, remSec, label);
   };
-  for (const m of (mv.incoming || [])) drawMove(m, true);
-  for (const m of (mv.outgoing || [])) drawMove(m, false);
+  for (const m of mv.incoming || []) drawMove(m, true);
+  for (const m of mv.outgoing || []) drawMove(m, false);
 
   // Koordinaten-Lineal am Rand
   for (let d = -R; d <= R; d++) {
-    const wx = center.x + d, wy = center.y + d, p = px(d);
+    const wx = center.x + d,
+      wy = center.y + d,
+      p = px(d);
     ruler += `<text x="${p}" y="${M - 6}" text-anchor="middle" font-size="10" fill="${WM.ink}" font-family="Georgia,serif" opacity="0.75">${wx}</text>`;
     ruler += `<text x="${M - 8}" y="${(p + 3.5).toFixed(1)}" text-anchor="middle" font-size="10" fill="${WM.ink}" font-family="Georgia,serif" opacity="0.75">${wy}</text>`;
   }
@@ -377,7 +435,7 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
     grid += `<line x1="${M + i * CELL}" y1="${M}" x2="${M + i * CELL}" y2="${M + inner}"/>`;
     grid += `<line x1="${M}" y1="${M + i * CELL}" x2="${M + inner}" y2="${M + i * CELL}"/>`;
   }
-  grid += '</g>';
+  grid += "</g>";
 
   const compass = wmCompass(M + inner - 40, M + inner - 40, 20);
 
@@ -385,8 +443,17 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
   const frame = `
     <rect x="4" y="4" width="${W - 8}" height="${W - 8}" fill="none" stroke="${WM.inkD}" stroke-width="4"/>
     <rect x="10" y="10" width="${W - 20}" height="${W - 20}" fill="none" stroke="${WM.ink}" stroke-width="1.2"/>
-    ${[[10, 10], [W - 10, 10], [10, W - 10], [W - 10, W - 10]].map(([x, y]) =>
-      `<circle cx="${x}" cy="${y}" r="5.5" fill="${WM.parchDD}" stroke="${WM.inkD}" stroke-width="1.2"/>`).join('')}`;
+    ${[
+      [10, 10],
+      [W - 10, 10],
+      [10, W - 10],
+      [W - 10, W - 10],
+    ]
+      .map(
+        ([x, y]) =>
+          `<circle cx="${x}" cy="${y}" r="5.5" fill="${WM.parchDD}" stroke="${WM.inkD}" stroke-width="1.2"/>`,
+      )
+      .join("")}`;
 
   return `
   <svg id="worldMap" viewBox="0 0 ${W} ${W}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Weltkarte">

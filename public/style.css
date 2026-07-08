@@ -265,6 +265,36 @@ select:focus {
   font-weight: 600;
 }
 
+/* Dorf-Auswahl in der Topbar (nur sichtbar bei mehreren Dörfern) */
+.village-select {
+  background: linear-gradient(180deg, var(--panel2), var(--panel));
+  color: var(--text);
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  max-width: 220px;
+}
+.village-select:hover {
+  border-color: #f0c65e;
+}
+
+/* Adelungs-Fortschritt in der Dorf-Detailkarte auf der Weltkarte */
+.conquest-bar {
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: #3a2626;
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+  color: var(--gold);
+  font-size: 14px;
+}
+.conquest-bar b {
+  color: #fff;
+}
+
 .banner {
   padding: 8px 18px;
   font-size: 14px;

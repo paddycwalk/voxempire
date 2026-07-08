@@ -23,12 +23,12 @@ Beenden (Strg+C) gespeichert. Solange der Server läuft, läuft die Welt.
 
 ### Konfiguration (Umgebungsvariablen)
 
-| Variable | Default | Bedeutung |
-|---|---|---|
-| `PORT` | `8090` | HTTP-Port |
-| `VOX_SPEED` | `3` | Weltgeschwindigkeit (Produktion ×, Bau-/Reisezeiten ÷) |
-| `VOX_PROTECTION_MIN` | `1440` | Anfängerschutz in Minuten (0 = aus) |
-| `VOX_DB` | `./db.json` | Pfad zur Spielstand-Datei |
+| Variable             | Default     | Bedeutung                                              |
+| -------------------- | ----------- | ------------------------------------------------------ |
+| `PORT`               | `8090`      | HTTP-Port                                              |
+| `VOX_SPEED`          | `3`         | Weltgeschwindigkeit (Produktion ×, Bau-/Reisezeiten ÷) |
+| `VOX_PROTECTION_MIN` | `1440`      | Anfängerschutz in Minuten (0 = aus)                    |
+| `VOX_DB`             | `./db.json` | Pfad zur Spielstand-Datei                              |
 
 Beispiel für eine schnelle Testrunde: `VOX_SPEED=50 VOX_PROTECTION_MIN=1 node server.js`
 
@@ -59,6 +59,16 @@ Beispiel für eine schnelle Testrunde: `VOX_SPEED=50 VOX_PROTECTION_MIN=1 node s
   Beide Seiten erhalten einen Kampfbericht. Die Stadtmauer des Verteidigers
   zählt auch, wenn er offline ist. Der Bericht zeigt Kräftevergleich,
   Verluste beider Seiten und die erbeutete Menge inklusive Tragekapazität.
+- **Dörfer erobern (Adelung)**: Schicke einen **Paladin** in einen Angriff.
+  Übersteht er einen **gewonnenen** Angriff, sinkt die Treue des fremden Dorfes
+  um eine Stufe. Nach **3** solcher Paladin-Angriffe wechselt das Dorf den
+  Besitzer und gehört fortan dir. Greift ein anderer Angreifer mit Paladin an,
+  beginnt die Treue-Zählung von vorn. Dein Adelungs-Fortschritt (👑 x/3) wird
+  auf der Weltkarte und in der Dorf-Detailkarte angezeigt.
+- **Mehrere Dörfer**: Besitzt du mehr als ein Dorf (durch Eroberung), erscheint
+  oben in der Kopfleiste ein **Dropdown** zum Umschalten. Das gewählte Dorf ist
+  aktiv für Ausbau, Ausbildung, Angriffe und Sammeln — genau wie dein Startdorf.
+  Verliert ein Spieler sein letztes Dorf, bekommt er automatisch ein frisches.
 - **Spähen**: Schicke Späher zu einem fremden Dorf, um dessen Rohstoffe und
   Truppen aufzudecken. Hat das Ziel eigene Späher, werden deine abgefangen —
   bei zu wenigen bekommst du keine Informationen und der Gegner wird gewarnt.

@@ -422,6 +422,21 @@ async function refreshState() {
   applyState(await api("/api/state"));
 }
 
+// Aktives Dorf wechseln (Startdorf oder erobertes Dorf) und Ansicht neu aufbauen.
+async function selectVillage(id) {
+  try {
+    const next = await api("/api/village/select", { id });
+    applyState(next);
+    mapCenter = { x: state.village.x, y: state.village.y };
+    selectedTile = null;
+    selectedNode = null;
+    renderTab(activeTab);
+    toast(`Aktives Dorf: ${state.village.name}`);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
 // Rohstoffe zwischen zwei Polls clientseitig hochzählen
 function liveRes(r) {
   const v = state.village;
@@ -442,6 +457,22 @@ function renderHeader() {
   const resEl = $("#resResidents");
   if (resEl && v.residents)
     resEl.textContent = `${v.residents.idle}/${v.residents.total}`;
+
+  // Dorf-Auswahl: nur einblenden, wenn man mehr als ein Dorf besitzt.
+  const vsel = $("#villageSelect");
+  if (vsel && state.villages) {
+    const many = state.villages.length > 1;
+    vsel.classList.toggle("hidden", !many);
+    if (many) {
+      vsel.innerHTML = state.villages
+        .map(
+          (vv) =>
+            `<option value="${vv.id}" ${vv.active ? "selected" : ""}>🏰 ${esc(vv.name)} (${vv.x}|${vv.y})</option>`,
+        )
+        .join("");
+      vsel.onchange = () => selectVillage(vsel.value);
+    }
+  }
 
   const badge = $("#reportBadge");
   badge.classList.toggle("hidden", state.unreadReports === 0);
@@ -1085,6 +1116,7 @@ renderers.karte = async () => {
       <span><i class="lg-castle">🏰</i> Dein Dorf</span>
       <span><i class="lg-ally"></i> Allianz</span>
       <span><i class="lg-shield">🛡️</i> Anfängerschutz</span>
+      <span><i>👑</i> Adelung läuft</span>
       <span><i class="lg-town"></i> Andere</span>
       <span><i class="lg-node-holz"></i> Wald</span>
       <span><i class="lg-node-stein"></i> Steinbruch</span>
@@ -1174,13 +1206,22 @@ function renderVillageDetail() {
       </div>
       <p class="muted small">Beute = Tragekapazität deiner Truppen. Wie viele Rohstoffe wirklich im Ziel liegen, siehst du erst im Kampfbericht — oder vorab per Spähen.</p>
       <button class="btn primary" onclick="actionAttack()">⚔️ Angriff starten</button>
+      <p class="muted small">👑 <b>Adelung:</b> Schicke einen <b>Paladin</b> mit. Übersteht er einen gewonnenen Angriff, sinkt die Treue des Dorfes. Nach ${meta.CONQUEST_ATTACKS || 3} solcher Angriffe gehört das Dorf dir.</p>
       ${scoutForm}`;
+  }
+
+  // Adelungs-Fortschritt (nur sichtbar, wenn du selbst schon einen Paladin geschickt hast)
+  let conquestBanner = "";
+  if (t.conquest) {
+    const { progress, needed } = t.conquest;
+    conquestBanner = `<div class="conquest-bar" title="Adelungs-Fortschritt">👑 Treue gebrochen: <b>${progress}/${needed}</b> — noch ${Math.max(0, needed - progress)} Paladin-Angriff(e) bis zur Eroberung.</div>`;
   }
 
   el.innerHTML = `
     <div class="card">
       <h3 style="margin-top:0">${esc(t.village)} <small class="muted">(${t.x}|${t.y})</small></h3>
       <p>Besitzer: <b class="gold">${esc(t.owner)}</b>${t.alliance ? ` · Allianz: [${esc(t.alliance)}]` : ""} · ${fmtNum(t.points)} Punkte</p>
+      ${conquestBanner}
       ${attackForm}
     </div>`;
   window.updateTravelPreview();
@@ -2097,6 +2138,12 @@ renderers.berichte = async () => {
           const outcome = r.won
             ? `<span class="green">Angreifer siegreich</span>`
             : `<span class="red">Verteidiger siegreich</span>`;
+          let conquestBlock = "";
+          if (r.conquest) {
+            conquestBlock = r.conquest.conquered
+              ? `<div class="rloot"><b>👑 Adelung</b> <span class="green">Dorf erobert — es wechselt den Besitzer!</span></div>`
+              : `<div class="rloot"><b>👑 Adelung</b> Treue ${r.conquest.progress}/${r.conquest.needed} — noch ${Math.max(0, r.conquest.needed - r.conquest.progress)} Paladin-Angriff(e) bis zur Eroberung.</div>`;
+          }
           return `
       <div class="card report ${success ? "won" : "lost"}" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
         <div class="rhead"><b>${success ? "✅" : "❌"} ${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
@@ -2104,6 +2151,7 @@ renderers.berichte = async () => {
           <p class="muted">⚔️ ${esc(r.attacker.name)} (${esc(r.attacker.village)}, ${r.attacker.x}|${r.attacker.y}) → 🛡️ ${esc(r.defender.name)} (${esc(r.defender.village)}, ${r.defender.x}|${r.defender.y})<br>Ergebnis: ${outcome}${wallNote}</p>
           ${powerBar(r.attacker.power || 0, r.defender.power || 0)}
           ${lootBlock}
+          ${conquestBlock}
           <div class="grid2">
             <div>${unitTable("Angreifer", r.attacker.sent, r.attacker.lost)}</div>
             <div>${unitTable("Verteidiger", r.defender.had, r.defender.lost)}</div>
