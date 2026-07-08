@@ -90,6 +90,10 @@ const routes = {
     auth: true,
     fn: (u, b) => game.attack(u, Number(b.x), Number(b.y), b.units),
   },
+  "POST /api/attack/cancel": {
+    auth: true,
+    fn: (u, b) => game.cancelAttack(u, b.id),
+  },
   "POST /api/scout": {
     auth: true,
     fn: (u, b) => game.scout(u, Number(b.x), Number(b.y), b.count),
@@ -142,7 +146,10 @@ const routes = {
       return game.marketList();
     },
   },
-
+  "POST /api/market/exchange": {
+    auth: true,
+    fn: (u, b) => game.marketExchange(u, b.giveRes, b.wantRes, b.wantAmount),
+  },
   "GET  /api/alliance": { auth: true, fn: (u) => game.allianceInfo(u) },
   "GET  /api/alliances": { auth: true, fn: () => game.allianceList() },
   "POST /api/alliance/create": {

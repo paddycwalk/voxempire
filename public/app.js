@@ -293,7 +293,10 @@ function detectCompletions(prev, next) {
     const n = next.pendingFriendRequests - prev.pendingFriendRequests;
     notify({
       type: "info",
-      title: n === 1 ? "Neue Freundschaftsanfrage" : `${n} neue Freundschaftsanfragen`,
+      title:
+        n === 1
+          ? "Neue Freundschaftsanfrage"
+          : `${n} neue Freundschaftsanfragen`,
       body: "Klicken zum Öffnen.",
       tab: "freunde",
     });
@@ -437,7 +440,8 @@ function renderHeader() {
   $("#rateEisen").textContent = `+${fmtNum(v.rates.eisen)}/h`;
   $("#resPop").textContent = `${v.pop}/${v.popCap}`;
   const resEl = $("#resResidents");
-  if (resEl && v.residents) resEl.textContent = `${v.residents.idle}/${v.residents.total}`;
+  if (resEl && v.residents)
+    resEl.textContent = `${v.residents.idle}/${v.residents.total}`;
 
   const badge = $("#reportBadge");
   badge.classList.toggle("hidden", state.unreadReports === 0);
@@ -817,7 +821,11 @@ function movementsHtml() {
             ? `🔍 Spähen von ${esc(m.target)} (${m.x}|${m.y})`
             : `↩️ Rückkehr von ${esc(m.target)}`;
       const loot = m.loot ? ` · Beute: ${costHtml(m.loot)}` : "";
-      return `<div class="queue-item"><span>${what} — ${units}${loot}</span>${countdown(m.at)}</div>`;
+      const cancel =
+        (m.type === "attack" || m.type === "scout") && m.id
+          ? ` <button class="btn small danger" onclick="cancelMove('${m.id}')" title="Zurückbeordern">✖</button>`
+          : "";
+      return `<div class="queue-item"><span>${what} — ${units}${loot}</span>${countdown(m.at)}${cancel}</div>`;
     })
     .join("");
   return inc + out || '<p class="muted">Keine Bewegungen.</p>';
@@ -882,7 +890,12 @@ window.actionBuild = async (key) => {
 
 window.actionDemolish = async (key) => {
   const b = state.village.buildings[key];
-  if (!confirm(`${meta.BUILDINGS[key].name} von Stufe ${b.level} auf ${b.level - 1} abreißen? Du bekommst die Hälfte der ausgegebenen Rohstoffe zurück.`)) return;
+  if (
+    !confirm(
+      `${meta.BUILDINGS[key].name} von Stufe ${b.level} auf ${b.level - 1} abreißen? Du bekommst die Hälfte der ausgegebenen Rohstoffe zurück.`,
+    )
+  )
+    return;
   try {
     applyState(await api("/api/demolish", { building: key }));
     renderers.dorf();
@@ -948,7 +961,8 @@ renderers.militaer = () => {
       }
       const cnt = trainCounts[key] ?? "";
       const presetBtns = TRAIN_PRESETS.map(
-        (n) => `<button type="button" class="btn small" onclick="pickTrainCount('${key}', ${n})">${n}</button>`,
+        (n) =>
+          `<button type="button" class="btn small" onclick="pickTrainCount('${key}', ${n})">${n}</button>`,
       ).join("");
       return `
       <tr>
@@ -1213,6 +1227,20 @@ window.actionScout = async () => {
   }
 };
 
+// Laufenden Angriff/Spähzug abbrechen — Truppen kehren um und marschieren zurück
+window.cancelMove = async (id) => {
+  if (!confirm("Diese Bewegung abbrechen? Die Truppen kehren sofort um."))
+    return;
+  try {
+    const r = await api("/api/attack/cancel", { id });
+    toast(`Truppen kehren um! Ankunft: ${fmtTime(r.arrival)}`);
+    await refreshState();
+    renderVillageDetail();
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
+
 // Detailkarte für ein Rohstoffvorkommen: Bewohner zum Sammeln losschicken.
 const NODE_META = {
   holz: { icon: "🌲", label: "Wald", res: "Holz" },
@@ -1224,7 +1252,11 @@ function renderNodeDetail() {
   const n = selectedNode;
   const el = $("#villageDetail");
   if (!el || !n) return;
-  const info = NODE_META[n.res] || { icon: "⛰️", label: "Vorkommen", res: n.res };
+  const info = NODE_META[n.res] || {
+    icon: "⛰️",
+    label: "Vorkommen",
+    res: n.res,
+  };
   const dist = Math.hypot(state.village.x - n.x, state.village.y - n.y);
   const idle = state.village.residents ? state.village.residents.idle : 0;
 
@@ -1251,7 +1283,11 @@ function renderNodeDetail() {
 
 window.updateGatherPreview = () => {
   if (!selectedNode) return;
-  const g = meta.GATHER || { workerSpeedEff: 18, workMs: 300000, yieldPerWorker: 36 };
+  const g = meta.GATHER || {
+    workerSpeedEff: 18,
+    workMs: 300000,
+    yieldPerWorker: 36,
+  };
   const n = Math.max(0, Number($("#gather-count")?.value || 0));
   const dist = Math.hypot(
     state.village.x - selectedNode.x,
@@ -1259,7 +1295,9 @@ window.updateGatherPreview = () => {
   );
   const travel = (dist / g.workerSpeedEff) * 3_600_000;
   const total = travel * 2 + g.workMs;
-  const yieldAmt = Math.round(n * (selectedNode.richness || 1) * g.yieldPerWorker);
+  const yieldAmt = Math.round(
+    n * (selectedNode.richness || 1) * g.yieldPerWorker,
+  );
   const tEl = $("#gatherTime");
   const yEl = $("#gatherYield");
   if (tEl) tEl.textContent = n >= 1 ? fmtDur(total) : "—";
@@ -1332,6 +1370,16 @@ function renderMarket(offers) {
     <h2>Marktplatz</h2>
     ${state.village.buildings.markt.level < 1 ? '<div class="card"><p class="muted">⚠️ Baue zuerst einen <b>Marktplatz</b>, um eigene Angebote zu erstellen. Annehmen geht immer.</p></div>' : ""}
     <div class="card">
+      <h3 style="margin-top:0">Sofort-Tausch</h3>
+      <p class="muted">Tausch beim Basar — geht immer, aber zum Kurs <b>3:1</b> (du zahlst das Dreifache).</p>
+      <div class="formrow">
+        <label>Ich gebe <select id="exGiveRes">${resOpts}</select></label>
+        <label>Ich möchte <select id="exWantRes">${resOpts}</select></label>
+        <label>Menge <input id="exWantAmt" type="number" min="1" value="100" style="width:90px"></label>
+        <button class="btn" onclick="marketAction('exchange')">Tauschen</button>
+      </div>
+    </div>
+    <div class="card">
       <h3 style="margin-top:0">Neues Angebot</h3>
       <div class="formrow">
         <label>Ich biete <select id="giveRes">${resOpts}</select></label>
@@ -1348,6 +1396,7 @@ function renderMarket(offers) {
       </table>
     </div>`;
   $("#wantRes").value = "stein";
+  $("#exWantRes").value = "stein";
 }
 
 window.marketAction = async (what, id) => {
@@ -1359,6 +1408,16 @@ window.marketAction = async (what, id) => {
         want: { res: $("#wantRes").value, amount: Number($("#wantAmt").value) },
       });
       toast("Angebot erstellt — Rohstoffe sind reserviert.");
+    } else if (what === "exchange") {
+      const r = await api("/api/market/exchange", {
+        giveRes: $("#exGiveRes").value,
+        wantRes: $("#exWantRes").value,
+        wantAmount: Number($("#exWantAmt").value),
+      });
+      toast(
+        `Getauscht: ${r.give.amount} ${RES_NAMES[r.give.res]} → ${r.want.amount} ${RES_NAMES[r.want.res]}.`,
+      );
+      offers = await api("/api/market");
     } else {
       offers = await api("/api/market/" + what, { id });
       toast(
@@ -1505,8 +1564,7 @@ function renderChatLog(messages) {
   const log = $("#chatLog");
   if (!log) return;
   // Nur automatisch nach unten scrollen, wenn der Nutzer ohnehin unten steht.
-  const atBottom =
-    log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   log.innerHTML = messages.length
     ? messages
         .map((m) => {
@@ -1719,7 +1777,10 @@ const RES_ICONS = { holz: "🪵", stein: "🪨", eisen: "⛓️" };
 function rewardHtml(reward) {
   return Object.entries(reward)
     .filter(([, n]) => n > 0)
-    .map(([r, n]) => `<span title="${RES_NAMES[r]}">${RES_ICONS[r]} ${fmtNum(n)}</span>`)
+    .map(
+      ([r, n]) =>
+        `<span title="${RES_NAMES[r]}">${RES_ICONS[r]} ${fmtNum(n)}</span>`,
+    )
     .join(" ");
 }
 
@@ -1750,7 +1811,8 @@ function renderQuestData(d) {
   const listEl = $("#questList");
   if (!lvlEl || !listEl) return;
 
-  const pct = d.need > 0 ? Math.min(100, Math.round((d.into / d.need) * 100)) : 100;
+  const pct =
+    d.need > 0 ? Math.min(100, Math.round((d.into / d.need) * 100)) : 100;
   lvlEl.innerHTML = `
     <div class="quest-level">
       <div class="quest-level-badge">${d.level}</div>
@@ -1768,11 +1830,16 @@ function renderQuestData(d) {
     if (q.locked) return 2;
     return 1;
   };
-  const quests = [...d.quests].sort((a, b) => rank(a) - rank(b) || a.reqLevel - b.reqLevel);
+  const quests = [...d.quests].sort(
+    (a, b) => rank(a) - rank(b) || a.reqLevel - b.reqLevel,
+  );
 
   listEl.innerHTML = quests
     .map((q) => {
-      const pc = q.target > 0 ? Math.min(100, Math.round((q.current / q.target) * 100)) : 0;
+      const pc =
+        q.target > 0
+          ? Math.min(100, Math.round((q.current / q.target) * 100))
+          : 0;
       let cls = "quest";
       let action;
       if (q.claimed) {
@@ -1825,13 +1892,13 @@ window.claimQuest = async (id) => {
         ttl: 9000,
       });
     }
-    toast(`Auftrag abgeschlossen — +${d.xpGained} XP${parts ? ", " + parts : ""}.`);
+    toast(
+      `Auftrag abgeschlossen — +${d.xpGained} XP${parts ? ", " + parts : ""}.`,
+    );
   } catch (e) {
     toast(e.message, true);
   }
 };
-
-
 
 renderers.berichte = async () => {
   const el = $("#tab-berichte");
@@ -1948,11 +2015,32 @@ renderers.berichte = async () => {
       </div>`;
   };
 
+  // Sammelbericht: heimgekehrte Bewohner + Ertrag vom Rohstoffvorkommen
+  const gatherReport = (r) => {
+    const resName = RES_NAMES[r.res] || r.res;
+    const gotHtml = costHtml({ [r.res]: r.stored });
+    const wasteNote = r.wasted
+      ? `<p class="muted small red">⚠️ ${fmtNum(r.wasted)} ${resName} gingen verloren — dein Lager war voll.</p>`
+      : "";
+    const stockHtml = r.stock ? costHtml(r.stock) : "";
+    return `
+      <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
+        <div class="rhead"><b>👷 ${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+        <div class="rbody hidden">
+          <p class="muted">${fmtNum(r.workers)}× Bewohner am Vorkommen (${r.x}|${r.y})</p>
+          <div class="rloot"><b>📥 Gesammelt</b> ${gotHtml}</div>
+          ${wasteNote}
+          ${stockHtml ? `<div class="rloot"><b>📦 Lager jetzt</b> ${stockHtml}</div>` : ""}
+        </div>
+      </div>`;
+  };
+
   const items = reports.length
     ? reports
         .map((r) => {
           if (r.kind === "Spionage") return spyReport(r);
           if (r.kind === "Handel") return tradeReport(r);
+          if (r.kind === "Sammeln") return gatherReport(r);
           const iAmAttacker = r.attacker.name === state.user.name;
           const success = iAmAttacker ? r.won : !r.won;
           const lootTotal = r.loot
