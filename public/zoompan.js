@@ -73,7 +73,10 @@
     container.addEventListener('pointerdown', (e) => {
       const p = local(e);
       pointers.set(e.pointerId, p);
-      try { container.setPointerCapture(e.pointerId); } catch { /* egal */ }
+      // Wichtig: hier NICHT sofort setPointerCapture aufrufen — sonst wird der
+      // folgende click auf den Container statt auf das angeklickte SVG-Element
+      // umgeleitet und die onclick-Handler (Dorf/Vorkommen) feuern nie.
+      // Der Pointer wird erst bei einer echten Geste (Ziehen/Pinch) eingefangen.
 
       if (pointers.size === 1) {
         panStart = { x: p.x, y: p.y, tx: st.tx, ty: st.ty };
@@ -90,6 +93,9 @@
         const pts = [...pointers.values()];
         pinch = { dist: dist(pts[0], pts[1]), mid: mid(pts[0], pts[1]), s: st.s, tx: st.tx, ty: st.ty };
         moved = true; // Zwei Finger sind nie ein Klick
+        // Zwei Finger = Geste (nie ein Klick): Pointer jetzt einfangen, damit
+        // Bewegungen ausserhalb des SVG weiter ankommen.
+        for (const id of pointers.keys()) { try { container.setPointerCapture(id); } catch { /* egal */ } }
       }
     });
 
@@ -117,7 +123,12 @@
       } else if (pointers.size === 1 && panStart && st.s > 1) {
         const dx = p.x - panStart.x;
         const dy = p.y - panStart.y;
-        if (!moved && Math.hypot(dx, dy) > TAP) moved = true;
+        if (!moved && Math.hypot(dx, dy) > TAP) {
+          moved = true;
+          // Echtes Ziehen erkannt (kein Klick): Pointer jetzt einfangen, damit
+          // das Verschieben auch ausserhalb des SVG weiterläuft.
+          try { container.setPointerCapture(e.pointerId); } catch { /* egal */ }
+        }
         if (moved) {
           st.tx = panStart.tx + dx;
           st.ty = panStart.ty + dy;
