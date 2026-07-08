@@ -1110,14 +1110,16 @@ export function acceptFriendRequest(user, id) {
   const accepter = db.users[req.to];
   if (accepter) {
     addReport(accepter, {
-      time: now, kind: "Freundschaft",
+      time: now,
+      kind: "Freundschaft",
       title: `Du bist jetzt mit ${req.fromName} befreundet`,
       partner: req.fromName,
     });
   }
   if (requester) {
     addReport(requester, {
-      time: now, kind: "Freundschaft",
+      time: now,
+      kind: "Freundschaft",
       title: `${req.toName} hat deine Freundschaftsanfrage angenommen`,
       partner: req.toName,
     });
@@ -1345,7 +1347,9 @@ export function mapView(cx, cy, radius = 6) {
 }
 
 export function ranking(user) {
-  const myFriends = user ? new Set(db.friends[user.name.toLowerCase()] || []) : new Set();
+  const myFriends = user
+    ? new Set(db.friends[user.name.toLowerCase()] || [])
+    : new Set();
   return Object.values(db.users)
     .map((u) => {
       const v = db.villages[u.villageId];

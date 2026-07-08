@@ -756,6 +756,13 @@ tr.unit-locked {
 .vs-construct text {
   animation: vsBob 1.6s ease-in-out infinite;
 }
+.vs-upgrade {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: vsUpgrade 1.5s ease-in-out infinite;
+  filter: drop-shadow(0 0 5px rgba(139, 240, 168, 0.75));
+  pointer-events: none;
+}
 
 @keyframes vsFlag {
   0%,
@@ -835,6 +842,15 @@ tr.unit-locked {
     transform: translateY(-3px);
   }
 }
+@keyframes vsUpgrade {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-5px) scale(1.12);
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .vs-flag,
@@ -844,6 +860,7 @@ tr.unit-locked {
   .vs-cloud,
   .vs-fly,
   .vs-construct text,
+  .vs-upgrade,
   .vs-selring {
     animation: none;
   }
@@ -1716,7 +1733,8 @@ tr.unit-locked {
     opacity: 0;
   }
 
-  /* Tab-Leiste: eine Zeile, horizontal wischbar statt umbrechend */
+  /* Tab-Leiste: eine Zeile, horizontal wischbar statt umbrechend;
+     bleibt beim Scrollen oben kleben (sticky) */
   .tabs {
     flex-wrap: nowrap;
     overflow-x: auto;
@@ -1725,6 +1743,10 @@ tr.unit-locked {
     padding: 8px 12px 0;
     scrollbar-width: none;
     scroll-snap-type: x proximity;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--bg);
   }
   .tabs::-webkit-scrollbar {
     display: none;
