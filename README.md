@@ -70,7 +70,9 @@ zusätzlich `PAYPAL_ENV=live` setzen.
   wieder alle da sind). Auch bei einer verlorenen Verteidigung des Dorfes fallen
   Bewohner. Das Sammel-Formular zeigt eine **Erfolgschance in %** an (Bewohner
   kehren unversehrt heim): 100 %, sobald deine Wachen die geschätzte Räuberstärke
-  übertreffen, sonst ~70 %.
+  übertreffen, sonst ~70 %. Die **Wachen-Auswahl** ist im Militär-Stil gehalten
+  (Porträt, Werte) und zeigt nur Einheiten, die du wirklich im Dorf hast — mit
+  **Schnellauswahl** (1/10/25/50/100 und „Max").
 - **Verstärkung (Truppen abstellen)**: Klicke auf ein **eigenes weiteres Dorf**
   oder ein **Allianzmitglied** und entsende Truppen zur Unterstützung. Sie
   verteidigen das Zieldorf mit (Späher ausgenommen) und lassen sich jederzeit
@@ -84,6 +86,7 @@ zusätzlich `PAYPAL_ENV=live` setzen.
   Das Angriffs-Formular zeigt zudem eine geschätzte **Erfolgschance in %** —
   berechnet aus deiner Angriffskraft und der zuletzt **erspähten** Verteidigung
   (Truppen + Mauer) des Ziels. Ohne aktuelle Spähdaten bleibt sie unbekannt.
+  Bei der Truppenauswahl helfen **Schnellauswahl-Buttons** (1/10/25/50/100 und „Max").
 - **Dörfer erobern (Adelung)**: Schicke einen **Paladin** in einen Angriff.
   Übersteht er einen **gewonnenen** Angriff, sinkt die Treue des fremden Dorfes
   um eine Stufe. Nach **3** solcher Paladin-Angriffe wechselt das Dorf den
@@ -111,9 +114,16 @@ zusätzlich `PAYPAL_ENV=live` setzen.
 - **Anfängerschutz**: Neue Spieler sind 24 h unangreifbar — endet vorzeitig
   nur, sobald sie selbst angreifen.
 - **Markt**: Angebote wie „100 Holz gegen 80 Eisen" einstellen; andere Spieler
-  nehmen sie an. Rohstoffe werden beim Einstellen reserviert.
-- **Allianzen**: Gründen oder beitreten; Mitglieder können einander nicht
-  angreifen. Allianz-Rangliste inklusive.
+  nehmen sie an. Rohstoffe werden beim Einstellen reserviert. Angebote lassen
+  sich wahlweise **weltweit** oder **nur für die eigene Allianz** sichtbar
+  machen. Bei einem **Allianz-Handel** reist die Ware per **Handelskarre**
+  zwischen den Dörfern — sie kommt erst nach der Reisezeit an (der Weltmarkt
+  verrechnet weiterhin sofort).
+- **Allianzen**: Gründen oder beitreten (max. **10 Mitglieder**); Mitglieder
+  können einander nicht angreifen. Allianzmitglieder **teilen ihre Kartensicht**
+  (jeder sieht, was die Allianz bereits erkundet hat) und können über
+  **allianzinterne Marktangebote** direkt miteinander handeln. Allianz-Rangliste
+  inklusive.
 - **Welt-Chat**: Öffentlicher Kanal, in dem alle Spieler in Echtzeit
   Nachrichten austauschen (letzte 100 Nachrichten bleiben erhalten).
 - **Aufträge & Stufe**: Eine feste Auftragskette führt durch den Spielaufbau
@@ -150,3 +160,24 @@ zusätzlich `PAYPAL_ENV=live` setzen.
   überfällige Events nachgeholt.
 - **Client**: Vanilla-JS-SPA (`public/`), pollt den Serverstand alle 4 s und
   tickt Countdowns/Rohstoffanzeige lokal.
+
+## Changelog
+
+Neue Features und Änderungen werden hier festgehalten (neueste zuerst).
+
+### 2026-07-09
+
+- **Bauzeiten transparent**: Das Bau-Panel zeigt jetzt zusätzlich die reale
+  Fertigstellungszeit inklusive Wartezeit, falls bereits ein Ausbau läuft. Die
+  reine Bauzeit hängt weiterhin allein an der Gebäudestufe (nicht am
+  Spieler-Level).
+- **Schnellauswahl bei Truppen & Wachen**: Überall, wo Einheiten gewählt werden
+  (Angriff, Verstärkung, Sammel-Wachen, Ausbildung), gibt es Vorauswahl-Buttons
+  1/10/25/50/100 sowie einen **„Max"**-Button.
+- **Wachen im Militär-Stil**: Die Wachen-Auswahl bei Sammelmissionen sieht aus
+  wie der Militär-Tab (Porträt, Werte) und zeigt nur **verfügbare** Einheiten.
+- **Geteilte Allianz-Kartensicht**: Allianzmitglieder sehen gemeinsam, was die
+  Allianz erkundet hat (der Nebel des Krieges wird geteilt).
+- **Allianz-interner Handel**: Marktangebote lassen sich „nur für die Allianz"
+  einstellen; die Ware reist per **Handelskarre** mit Reisezeit ans Ziel.
+- **Allianz-Limit**: Maximal **10 Mitglieder** pro Allianz (mit „x/10"-Anzeige).

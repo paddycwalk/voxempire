@@ -1093,6 +1093,64 @@ window.pickTrainCount = (key, n) => {
   if (input) input.value = n;
   window.setTrainCount(key, n);
 };
+// „Max" bei der Ausbildung: höchste Anzahl, die Rohstoffe UND Versorgung noch zulassen (max. 500).
+window.pickTrainMax = (key) => {
+  const def = meta.UNITS[key];
+  const v = state.village;
+  let max = 500;
+  for (const r of Object.keys(def.cost))
+    if (def.cost[r] > 0)
+      max = Math.min(max, Math.floor((v.res[r] || 0) / def.cost[r]));
+  if (def.up > 0)
+    max = Math.min(max, Math.floor(Math.max(0, v.popCap - v.pop) / def.up));
+  window.pickTrainCount(key, Math.max(0, max));
+};
+
+// ---------- Gemeinsame Truppen-/Wachen-Auswahl im Militär-Stil ----------
+// Dieselben Vorauswahl-Sprünge wie im Militär-Tab, zusätzlich „Max".
+const UNIT_PRESETS = [1, 10, 25, 50, 100];
+
+// Setzt ein Mengen-Eingabefeld (auf max begrenzt) und stößt dessen Live-Vorschau
+// über den vorhandenen oninput-Handler an.
+window.setUnitCount = (inputId, val, max) => {
+  const el = document.getElementById(inputId);
+  if (!el) return;
+  el.value = Math.max(0, Math.min(Math.floor(Number(val) || 0), max));
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+};
+
+// Vorauswahl-Buttons (1/10/25/… + Max) für ein Mengenfeld.
+function unitPresetBtns(inputId, max) {
+  if (max <= 0) return "";
+  const nums = UNIT_PRESETS.filter((n) => n < max)
+    .map(
+      (n) =>
+        `<button type="button" class="btn small" onclick="setUnitCount('${inputId}',${n},${max})">${n}</button>`,
+    )
+    .join("");
+  return `<span class="pick-presets">${nums}<button type="button" class="btn small" onclick="setUnitCount('${inputId}',${max},${max})">Max</button></span>`;
+}
+
+// Auswahlkarte im Militär-Stil: Porträt, Werte, „verfügbar", Presets + Eingabefeld.
+// stat="off" hebt die Angriffswerte hervor, sonst die Verteidigung (Wachen/Verstärkung).
+function unitPickerCard(key, def, max, inputId, oninput = "", stat = "def") {
+  const empty = max <= 0 ? " is-empty" : "";
+  const stats =
+    stat === "off"
+      ? `⚔️${def.off} · 🛡️${def.def} · 🐎${def.speed} · 🎒${def.carry}`
+      : `🛡️${def.def} · ⚔️${def.off} · 🐎${def.speed}`;
+  return `
+    <label class="pick-card${empty}" for="${inputId}" title="${esc(def.name)}">
+      <span class="pick-portrait">${UNIT_ICONS[key] || ""}</span>
+      <span class="pick-info">
+        <b>${esc(def.name)}</b>
+        <small class="pick-stats">${stats}</small>
+        <small class="pick-avail">verfügbar: <b>${fmtNum(max)}</b></small>
+      </span>
+      <input class="pick-input" type="number" min="0" max="${max}" value="0" id="${inputId}" ${max ? "" : "disabled"}${oninput ? ` oninput="${oninput}"` : ""}>
+      ${unitPresetBtns(inputId, max)}
+    </label>`;
+}
 
 // Kosten, ‑Zeit und ‑Versorgung für die gewählte Anzahl — aktualisiert sich live in der Kosten-Spalte.
 // Ohne Auswahl werden die Werte pro Einheit angezeigt.
@@ -1131,10 +1189,12 @@ renderers.militaer = () => {
       </tr>`;
       }
       const cnt = trainCounts[key] ?? "";
-      const presetBtns = TRAIN_PRESETS.map(
-        (n) =>
-          `<button type="button" class="btn small" onclick="pickTrainCount('${key}', ${n})">${n}</button>`,
-      ).join("");
+      const presetBtns =
+        TRAIN_PRESETS.map(
+          (n) =>
+            `<button type="button" class="btn small" onclick="pickTrainCount('${key}', ${n})">${n}</button>`,
+        ).join("") +
+        `<button type="button" class="btn small" onclick="pickTrainMax('${key}')">Max</button>`;
       return `
       <tr>
         <td class="unit-cell"><span class="unit-portrait">${UNIT_ICONS[key] || ""}</span></td>
@@ -1414,23 +1474,16 @@ function renderVillageDetail() {
   } else {
     const inputs = Object.entries(meta.UNITS)
       .filter(([, def]) => !def.scout)
-      .map(([k, def]) => {
-        const max = state.village.units[k].count;
-        const empty = max <= 0 ? " is-empty" : "";
-        return `
-      <label class="atk-unit${empty}" for="atk-${k}" title="${def.name}">
-        <span class="atk-portrait">${UNIT_ICONS[k] || ""}</span>
-        <span class="atk-info">
-          <b>${def.name}</b>
-          <small class="atk-stats">⚔️${def.off} · 🛡️${def.def} · 🐎${def.speed} · 🎒${def.carry}</small>
-          <small class="atk-avail">verfügbar: <b>${fmtNum(max)}</b></small>
-        </span>
-        <span class="atk-controls">
-          <input type="number" min="0" max="${max}" value="0" id="atk-${k}" ${max ? "" : "disabled"} oninput="updateTravelPreview()">
-          <button type="button" class="btn small" onclick="setAtkMax('${k}', ${max})" ${max ? "" : "disabled"}>Max</button>
-        </span>
-      </label>`;
-      })
+      .map(([k, def]) =>
+        unitPickerCard(
+          k,
+          def,
+          state.village.units[k].count,
+          `atk-${k}`,
+          "updateTravelPreview()",
+          "off",
+        ),
+      )
       .join("");
     const scoutMax = state.village.units.spaeher?.count || 0;
     const scoutForm = `
@@ -1475,21 +1528,15 @@ function renderVillageDetail() {
   if (canReinforce) {
     const rows = Object.entries(meta.UNITS)
       .filter(([, def]) => !def.scout)
-      .map(([k, def]) => {
-        const max = state.village.units[k]?.count || 0;
-        const empty = max <= 0 ? " is-empty" : "";
-        return `
-          <label class="guard-unit${empty}" title="${esc(def.name)}">
-            <span>${UNIT_ICONS[k] || ""} ${esc(def.name)} <small class="muted">🛡️${def.def}</small></span>
-            <input type="number" min="0" max="${max}" value="0" id="reinf-${k}">
-          </label>`;
-      })
+      .map(([k, def]) =>
+        unitPickerCard(k, def, state.village.units[k]?.count || 0, `reinf-${k}`),
+      )
       .join("");
     reinforceForm = `
       <div class="reinforce-box">
         <h4>🤝 Verstärkung entsenden</h4>
         <p class="muted small">Schicke Truppen nach ${esc(t.village)} (${dist.toFixed(1)} Felder). Sie verteidigen das Dorf mit und lassen sich jederzeit zurückbeordern. Späher können nicht verstärken.</p>
-        <div class="guard-grid">${rows}</div>
+        <div class="unit-picker">${rows}</div>
         <button class="btn primary" onclick="actionReinforce()">🤝 Verstärkung schicken</button>
       </div>`;
   }
@@ -1506,14 +1553,6 @@ function renderVillageDetail() {
   window.updateScoutPreview();
   if (!own && !t.protected) ensureScoutIntel();
 }
-
-window.setAtkMax = (k, max) => {
-  const el = $("#atk-" + k);
-  if (el) {
-    el.value = max;
-    window.updateTravelPreview();
-  }
-};
 
 window.updateTravelPreview = () => {
   const el = $("#travelPreview");
@@ -1760,19 +1799,23 @@ function renderNodeDetail() {
   const idle = state.village.residents ? state.village.residents.idle : 0;
   const ambushPct = Math.round((meta.GATHER?.ambushChance ?? 0.3) * 100);
 
-  // Wachen-Auswahl: alle Kampfeinheiten (keine Späher), die im Dorf stehen.
-  const guardInputs = Object.entries(meta.UNITS)
-    .filter(([, def]) => !def.scout)
-    .map(([k, def]) => {
-      const max = state.village.units[k]?.count || 0;
-      const empty = max <= 0 ? " is-empty" : "";
-      return `
-        <label class="guard-unit${empty}" title="${esc(def.name)}">
-          <span>${UNIT_ICONS[k] || ""} ${esc(def.name)} <small class="muted">🛡️${def.def}</small></span>
-          <input type="number" min="0" max="${max}" value="0" id="guard-${k}" ${max ? "" : "disabled"} oninput="updateGatherPreview()">
-        </label>`;
-    })
-    .join("");
+  // Wachen-Auswahl im Militär-Stil: nur Kampfeinheiten (keine Späher), die auch
+  // wirklich im Dorf verfügbar sind — mit Porträt, Werten und Vorauswahl (1/10/25 … Max).
+  const guardInputs =
+    Object.entries(meta.UNITS)
+      .filter(([, def]) => !def.scout)
+      .filter(([k]) => (state.village.units[k]?.count || 0) > 0)
+      .map(([k, def]) =>
+        unitPickerCard(
+          k,
+          def,
+          state.village.units[k].count,
+          `guard-${k}`,
+          "updateGatherPreview()",
+        ),
+      )
+      .join("") ||
+    '<p class="muted small">Keine Truppen im Dorf, die du als Wache mitschicken könntest.</p>';
 
   el.innerHTML = `
     <div class="card">
@@ -1788,7 +1831,7 @@ function renderNodeDetail() {
       <div class="guard-box">
         <h4 style="margin:.4rem 0">🛡️ Wachen mitschicken <small class="muted">(optional)</small></h4>
         <p class="muted small">Unterwegs droht mit ~${ambushPct}% ein Räuberüberfall. Ohne ausreichende Wachen sterben Bewohner (sie wachsen danach im Rathaus nach). Wachen kehren mit den Bewohnern heim.</p>
-        <div class="guard-grid">${guardInputs}</div>
+        <div class="unit-picker">${guardInputs}</div>
       </div>
       <div class="attack-preview">
         <div><span class="muted">Entfernung</span><b>${dist.toFixed(1)} Felder</b></div>
@@ -1916,15 +1959,19 @@ function renderMarket(offers) {
     ? offers
         .map((o) => {
           const mine = o.seller === state.user.name;
+          const allyBadge =
+            o.scope === "alliance"
+              ? ` <span class="ally-offer" title="Nur für deine Allianz sichtbar">🛡️${o.alliance ? " [" + esc(o.alliance) + "]" : ""}</span>`
+              : "";
           return `
       <tr>
-        <td>${esc(o.seller)}${mine ? ' <span class="gold">(du)</span>' : ""}</td>
+        <td>${esc(o.seller)}${mine ? ' <span class="gold">(du)</span>' : ""}${allyBadge}</td>
         <td>${costHtml({ [o.give.res]: o.give.amount })}</td>
         <td>${costHtml({ [o.want.res]: o.want.amount })}</td>
         <td>${
           mine
             ? `<button class="btn small danger" onclick="marketAction('cancel','${o.id}')">Zurückziehen</button>`
-            : `<button class="btn small primary" onclick="marketAction('accept','${o.id}')">Annehmen</button>`
+            : `<button class="btn small primary" onclick="marketAction('accept','${o.id}','${o.scope || "world"}')">Annehmen</button>`
         }</td>
       </tr>`;
         })
@@ -1952,6 +1999,11 @@ function renderMarket(offers) {
         <label>Menge <input id="giveAmt" type="number" min="1" value="100" style="width:90px"></label>
         <label>Ich möchte <select id="wantRes">${resOpts}</select></label>
         <label>Menge <input id="wantAmt" type="number" min="1" value="100" style="width:90px"></label>
+        ${
+          state.user.allianceTag
+            ? `<label>Sichtbar für <select id="offerScope"><option value="world">Alle Spieler</option><option value="alliance">Nur Allianz [${esc(state.user.allianceTag)}]</option></select></label>`
+            : ""
+        }
         <button class="btn primary" onclick="marketAction('create')">Anbieten</button>
       </div>
     </div>
@@ -2009,13 +2061,14 @@ window.transportRes = async () => {
   }
 };
 
-window.marketAction = async (what, id) => {
+window.marketAction = async (what, id, scope) => {
   try {
     let offers;
     if (what === "create") {
       offers = await api("/api/market/create", {
         give: { res: $("#giveRes").value, amount: Number($("#giveAmt").value) },
         want: { res: $("#wantRes").value, amount: Number($("#wantAmt").value) },
+        scope: $("#offerScope")?.value || "world",
       });
       toast("Angebot erstellt — Rohstoffe sind reserviert.");
     } else if (what === "exchange") {
@@ -2031,7 +2084,11 @@ window.marketAction = async (what, id) => {
     } else {
       offers = await api("/api/market/" + what, { id });
       toast(
-        what === "accept" ? "Handel abgeschlossen!" : "Angebot zurückgezogen.",
+        what !== "accept"
+          ? "Angebot zurückgezogen."
+          : scope === "alliance"
+            ? "Handel besiegelt — die Karre ist unterwegs."
+            : "Handel abgeschlossen!",
       );
     }
     await refreshState();
@@ -2077,7 +2134,7 @@ function renderOwnAlliance(a) {
   $("#tab-allianz").innerHTML = `
     <h2>[${esc(a.tag)}] ${esc(a.name)}</h2>
     <div class="card">
-      <p class="muted">Anführer: <b class="gold">${esc(a.leader)}</b> · ${a.members.length} Mitglieder · Allianzmitglieder können einander nicht angreifen.</p>
+      <p class="muted">Anführer: <b class="gold">${esc(a.leader)}</b> · ${a.members.length}/${a.maxMembers || 10} Mitglieder · Allianzmitglieder können einander nicht angreifen.</p>
       <table style="margin-top:10px">
         <thead><tr><th>Mitglied</th><th class="num">Punkte</th><th>Dorf</th><th></th></tr></thead>
         <tbody>${members}</tbody>
@@ -2093,9 +2150,13 @@ function renderAllianceLobby(list) {
           (a) => `
     <tr>
       <td><b>[${esc(a.tag)}]</b> ${esc(a.name)}</td>
-      <td class="num">${a.memberCount}</td>
+      <td class="num">${a.memberCount}/${a.maxMembers || 10}</td>
       <td class="num">${fmtNum(a.points)}</td>
-      <td><button class="btn small primary" onclick="allianceAction('join','${a.id}')">Beitreten</button></td>
+      <td>${
+        a.memberCount >= (a.maxMembers || 10)
+          ? '<span class="muted">Voll</span>'
+          : `<button class="btn small primary" onclick="allianceAction('join','${a.id}')">Beitreten</button>`
+      }</td>
     </tr>`,
         )
         .join("")
@@ -2627,6 +2688,7 @@ renderers.berichte = async () => {
   // Handelsbericht: erhaltene/abgegebene Rohstoffe + aktueller Lagerbestand
   const tradeReport = (r) => {
     const iAmSeller = r.role === "seller";
+    const pending = !!r.pending;
     const shortfall =
       r.received.offered != null && r.received.amount < r.received.offered;
     const gotHtml = costHtml({ [r.received.res]: r.received.amount });
@@ -2639,13 +2701,18 @@ renderers.berichte = async () => {
     const shortNote = shortfall
       ? `<p class="muted small red">⚠️ Nur ${fmtNum(r.received.amount)} von ${fmtNum(r.received.offered)} gutgeschrieben — dein Lager war voll.</p>`
       : "";
+    const pendingNote =
+      pending && r.arrival
+        ? `<p class="muted small">🛒 Die Handelskarre ist unterwegs — Ankunft ${fmtTime(r.arrival)}.</p>`
+        : "";
     const stockHtml = r.stock ? costHtml(r.stock) : "";
     return `
       <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
         <div class="rhead"><b>⚖️ ${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">
           ${partnerLine}
-          <div class="rloot"><b>📥 Erhalten</b> ${gotHtml}</div>
+          ${pendingNote}
+          <div class="rloot"><b>${pending ? "🛒 Erwartet" : "📥 Erhalten"}</b> ${gotHtml}</div>
           <div class="rloot"><b>📤 Abgegeben</b> ${paidHtml}</div>
           ${shortNote}
           ${stockHtml ? `<div class="rloot"><b>📦 Lager jetzt</b> ${stockHtml}</div>` : ""}

@@ -20,6 +20,7 @@ import {
   MAX_TRAIN_QUEUE,
   MAX_REPORTS,
   MAX_CHAT,
+  MAX_ALLIANCE_MEMBERS,
   CONQUEST_ATTACKS,
   RES,
   RES_NAMES,
@@ -197,6 +198,16 @@ function findFreeTile() {
 function ownedVillages(user) {
   const key = user.name.toLowerCase();
   return Object.values(db.villages).filter((v) => v.owner === key);
+}
+
+// Alle Spieler derselben Allianz (inkl. des Spielers selbst). Ohne Allianz nur
+// der Spieler selbst. Grundlage für geteilte Kartensicht und Allianz-Handel.
+function allianceMemberUsers(user) {
+  if (!user) return [];
+  if (!user.allianceId) return [user];
+  const a = db.alliances[user.allianceId];
+  if (!a) return [user];
+  return a.members.map((m) => db.users[m]).filter(Boolean);
 }
 
 // ---------------- Nebel des Krieges (Fog of War) ----------------
@@ -1520,10 +1531,13 @@ function resSnapshot(v) {
 
 // ---------------- Markt ----------------
 
-export function marketCreate(user, give, want) {
+export function marketCreate(user, give, want, scope = "world") {
   const v = db.villages[user.villageId];
   touchVillage(v);
   if (v.buildings.markt < 1) fail("Du brauchst zuerst einen Marktplatz.");
+  const allianceOnly = scope === "alliance";
+  if (allianceOnly && !user.allianceId)
+    fail("Nur als Allianzmitglied kannst du interne Angebote erstellen.");
   const mine = db.market.filter(
     (o) => o.seller === user.name.toLowerCase(),
   ).length;
@@ -1555,6 +1569,8 @@ export function marketCreate(user, give, want) {
     seller: user.name.toLowerCase(),
     give: g,
     want: w,
+    scope: allianceOnly ? "alliance" : "world",
+    allianceId: allianceOnly ? user.allianceId : null,
     created: Date.now(),
   });
 }
@@ -1565,6 +1581,8 @@ export function marketAccept(user, offerId) {
   const offer = db.market[idx];
   if (offer.seller === user.name.toLowerCase())
     fail("Eigene Angebote kannst du nur zurückziehen.");
+  if (offer.scope === "alliance" && offer.allianceId !== user.allianceId)
+    fail("Dieses Angebot ist nur für Allianzmitglieder bestimmt.");
   const sellerUser = db.users[offer.seller];
   const buyer = db.villages[user.villageId];
   const seller = db.villages[sellerUser.villageId];
@@ -1573,6 +1591,71 @@ export function marketAccept(user, offerId) {
   if (buyer.res[offer.want.res] < offer.want.amount)
     fail("Nicht genügend Rohstoffe zum Kauf.");
   buyer.res[offer.want.res] -= offer.want.amount;
+  db.market.splice(idx, 1);
+  const now = Date.now();
+
+  // Allianz-Handel: die Ware reist per Handelskarren zwischen den Dörfern und
+  // kommt erst nach der Reisezeit an (wie beim Rohstoff-Transport an eigene
+  // Dörfer). Der Käufer zahlt sofort — die Bezahlung fährt zum Verkäufer, die
+  // angebotene Ware zum Käufer. Bei vollem Lager kehrt der Überschuss zurück.
+  if (offer.scope === "alliance") {
+    const dist = Math.hypot(buyer.x - seller.x, buyer.y - seller.y);
+    const arrival = now + transportTimeMs(dist);
+    // Karre 1: die angebotene Ware vom Verkäufer zum Käufer.
+    db.events.push({
+      id: nextId("e"),
+      type: "transport",
+      at: arrival,
+      start: now,
+      from: seller.id,
+      to: buyer.id,
+      owner: user.name.toLowerCase(),
+      res: { [offer.give.res]: offer.give.amount },
+    });
+    // Karre 2: die Bezahlung vom Käufer zum Verkäufer.
+    db.events.push({
+      id: nextId("e"),
+      type: "transport",
+      at: arrival,
+      start: now,
+      from: buyer.id,
+      to: seller.id,
+      owner: offer.seller,
+      res: { [offer.want.res]: offer.want.amount },
+    });
+    addReport(user, {
+      time: now,
+      kind: "Handel",
+      role: "buyer",
+      title: `Handel mit ${sellerUser.name} — Karre unterwegs`,
+      partner: {
+        name: sellerUser.name,
+        village: seller.name,
+        x: seller.x,
+        y: seller.y,
+      },
+      received: { res: offer.give.res, amount: offer.give.amount },
+      paid: { res: offer.want.res, amount: offer.want.amount },
+      pending: true,
+      arrival,
+      stock: resSnapshot(buyer),
+    });
+    addReport(sellerUser, {
+      time: now,
+      kind: "Handel",
+      role: "seller",
+      title: `${user.name} nahm dein Angebot an — Karre unterwegs`,
+      partner: { name: user.name, village: buyer.name, x: buyer.x, y: buyer.y },
+      received: { res: offer.want.res, amount: offer.want.amount },
+      paid: { res: offer.give.res, amount: offer.give.amount },
+      pending: true,
+      arrival,
+      stock: resSnapshot(seller),
+    });
+    return { arrival };
+  }
+
+  // Weltmarkt: sofortige Verrechnung.
   const capB = storageCap(buyer.buildings.lager);
   const capS = storageCap(seller.buildings.lager);
   // Tatsächlich gutgeschriebene Menge (Lager-Limit) für einen ehrlichen Bericht festhalten
@@ -1588,10 +1671,8 @@ export function marketAccept(user, offerId) {
   );
   const buyerGot = buyer.res[offer.give.res] - buyerBefore;
   const sellerGot = seller.res[offer.want.res] - sellerBefore;
-  db.market.splice(idx, 1);
 
   // Handelsberichte für beide Seiten mit dem jeweils aktuellen Lagerbestand
-  const now = Date.now();
   addReport(user, {
     time: now,
     kind: "Handel",
@@ -1674,13 +1755,21 @@ export function marketExchange(user, giveRes, wantRes, wantAmount) {
   };
 }
 
-export function marketList() {
-  return db.market.map((o) => ({
-    id: o.id,
-    seller: db.users[o.seller].name,
-    give: o.give,
-    want: o.want,
-  }));
+export function marketList(user) {
+  const myAlliance = user ? user.allianceId : null;
+  return db.market
+    .filter((o) => o.scope !== "alliance" || o.allianceId === myAlliance)
+    .map((o) => ({
+      id: o.id,
+      seller: db.users[o.seller].name,
+      give: o.give,
+      want: o.want,
+      scope: o.scope || "world",
+      alliance:
+        o.scope === "alliance" && o.allianceId
+          ? db.alliances[o.allianceId]?.tag || null
+          : null,
+    }));
 }
 
 // ---------------- Allianzen ----------------
@@ -1714,6 +1803,8 @@ export function allianceCreate(user, tag, name) {
 export function allianceRequestJoin(user, id) {
   if (user.allianceId) fail("Du bist bereits in einer Allianz.");
   const a = db.alliances[id] || fail("Allianz nicht gefunden.");
+  if (a.members.length >= MAX_ALLIANCE_MEMBERS)
+    fail(`Diese Allianz ist voll (max. ${MAX_ALLIANCE_MEMBERS} Mitglieder).`);
   const key = user.name.toLowerCase();
   if (db.allianceRequests.some((r) => r.allianceId === a.id && r.user === key))
     fail("Deine Anfrage läuft bereits.");
@@ -1759,6 +1850,8 @@ export function allianceAcceptRequest(user, reqId) {
     db.allianceRequests.splice(idx, 1);
     fail("Der Spieler ist bereits in einer Allianz.");
   }
+  if (a.members.length >= MAX_ALLIANCE_MEMBERS)
+    fail(`Deine Allianz ist voll (max. ${MAX_ALLIANCE_MEMBERS} Mitglieder).`);
   db.allianceRequests.splice(idx, 1);
   // Alle übrigen offenen Anfragen dieses Spielers entfernen.
   db.allianceRequests = db.allianceRequests.filter((r) => r.user !== req.user);
@@ -1828,6 +1921,7 @@ export function allianceInfo(user) {
     tag: a.tag,
     name: a.name,
     leader: db.users[a.leader].name,
+    maxMembers: MAX_ALLIANCE_MEMBERS,
     members: a.members
       .map((m) => {
         const u = db.users[m];
@@ -1864,6 +1958,7 @@ export function allianceList(user) {
       tag: a.tag,
       name: a.name,
       memberCount: a.members.length,
+      maxMembers: MAX_ALLIANCE_MEMBERS,
       requested: key
         ? db.allianceRequests.some(
             (r) => r.allianceId === a.id && r.user === key,
@@ -2165,11 +2260,17 @@ export function claimQuest(user, id) {
 
 export function mapView(cx, cy, radius = 6, user = null) {
   const myKey = user ? user.name.toLowerCase() : null;
-  // Nebel des Krieges: nur eigene Sichtweite + erkundete Felder sind sichtbar.
-  const seen = user ? exploredSet(user) : null;
-  const ownedCoords = user
-    ? ownedVillages(user).map((v) => ({ x: v.x, y: v.y }))
-    : [];
+  // Nebel des Krieges: eigene Sichtweite + erkundete Felder. Allianzmitglieder
+  // teilen ihre Aufklärung untereinander — jeder sieht, was die Allianz kennt.
+  let seen = null;
+  const ownedCoords = [];
+  if (user) {
+    seen = new Set();
+    for (const m of allianceMemberUsers(user)) {
+      for (const k of exploredSet(m)) seen.add(k);
+      for (const v of ownedVillages(m)) ownedCoords.push({ x: v.x, y: v.y });
+    }
+  }
   const visible = (x, y) => tileVisible(x, y, ownedCoords, seen);
 
   const tiles = [];

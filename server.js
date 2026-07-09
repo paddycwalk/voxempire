@@ -160,26 +160,26 @@ const routes = {
     },
   },
 
-  "GET  /api/market": { auth: true, fn: () => game.marketList() },
+  "GET  /api/market": { auth: true, fn: (u) => game.marketList(u) },
   "POST /api/market/create": {
     auth: true,
     fn: (u, b) => {
-      game.marketCreate(u, b.give, b.want);
-      return game.marketList();
+      game.marketCreate(u, b.give, b.want, b.scope);
+      return game.marketList(u);
     },
   },
   "POST /api/market/accept": {
     auth: true,
     fn: (u, b) => {
       game.marketAccept(u, b.id);
-      return game.marketList();
+      return game.marketList(u);
     },
   },
   "POST /api/market/cancel": {
     auth: true,
     fn: (u, b) => {
       game.marketCancel(u, b.id);
-      return game.marketList();
+      return game.marketList(u);
     },
   },
   "POST /api/market/exchange": {

@@ -18,6 +18,8 @@ export const MAX_BUILD_QUEUE = 2;
 export const MAX_TRAIN_QUEUE = 5;
 export const MAX_REPORTS = 50;
 export const MAX_CHAT = 100; // Anzahl gespeicherter Chat-Nachrichten (Welt-Chat)
+// Maximale Mitgliederzahl je Allianz.
+export const MAX_ALLIANCE_MEMBERS = 10;
 // So oft muss ein Angriff mit überlebendem Paladin ein fremdes Dorf gewinnen,
 // bis es „aufgeadelt" ist und den Besitzer wechselt (Travian-Adelung).
 export const CONQUEST_ATTACKS = 3;
