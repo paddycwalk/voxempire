@@ -40,6 +40,7 @@ function emptyDb() {
     events: [], // Truppenbewegungen: { id, type: 'attack'|'return', at, ... }
     market: [], // { id, seller, give:{res,amount}, want:{res,amount}, created }
     alliances: {}, // id -> { id, tag, name, leader, members[], created }
+    allianceRequests: [], // Beitrittsanfragen: { id, allianceId, user, userName, time } (user = nameLower)
     chat: [], // Welt-Chat: { id, from, text, time } (auf MAX_CHAT begrenzt)
     friends: {}, // nameLower -> [nameLower, …] (bestätigte Freundschaften, beidseitig)
     friendRequests: [], // { id, from, to, fromName, toName, time } (from/to = nameLower)

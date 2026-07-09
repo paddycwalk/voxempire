@@ -20,10 +20,14 @@
 
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
-  function enableZoomPan(container, key) {
+  // onWorldPan(dxCells, dyCells): optional. Wird beim Loslassen aufgerufen,
+  // wenn bei Zoom = 1 gezogen wurde, um das Weltzentrum zu verschieben.
+  // cellSize: Kantenlänge eines Feldes in Pixeln (zur Umrechnung Zug → Felder).
+  function enableZoomPan(container, key, onWorldPan, cellSize) {
     if (!container) return;
     const svg = container.querySelector("svg");
     if (!svg) return;
+    const CELL = cellSize || 58;
 
     const st = store[key] || (store[key] = { s: 1, tx: 0, ty: 0 });
 
@@ -34,7 +38,7 @@
     // Transform anwenden + Verschiebung so begrenzen, dass der Inhalt den Container füllt.
     function apply() {
       const w = container.clientWidth || 1;
-      const h = container.clientHeight || 1;
+      const h = container.clientHeight ||| onWorldPan | 1;
       st.tx = clamp(st.tx, w * (1 - st.s), 0);
       st.ty = clamp(st.ty, h * (1 - st.s), 0);
       svg.style.transform = `translate(${st.tx}px, ${st.ty}px) scale(${st.s})`;
@@ -65,6 +69,8 @@
     let pinch = null; // { dist, mid, s, tx, ty } Ausgangslage der Pinch-Geste
     let moved = false; // wurde nennenswert bewegt? (unterdrückt Klick)
     let lastTap = 0;
+    let worldDX = 0,
+      worldDY = 0; // laufender Zug in Pixeln beim Welt-Verschieben (Zoom = 1)
 
     const local = (e) => {
       const r = container.getBoundingClientRect();
@@ -158,6 +164,26 @@
           container.style.cursor = "grabbing";
           e.preventDefault();
         }
+      } else if (pointers.size === 1 && panStart && onWorldPan) {
+        // Zoom = 1: die ganze Weltkarte verschieben. Live-Vorschau per Transform,
+        // beim Loslassen wird der Zug in Felder umgerechnet (siehe endPointer).
+        const dx = p.x - panStart.x;
+        const dy = p.y - panStart.y;
+        if (!moved && Math.hypot(dx, dy) > TAP) {
+          moved = true;
+          try {
+            container.setPointerCapture(e.pointerId);
+          } catch {
+            /* egal */
+          }
+        }
+        if (moved) {
+          worldDX = dx;
+          worldDY = dy;
+          svg.style.transform = `translate(${dx}px, ${dy}px) scale(1)`;
+          container.style.cursor = "grabbing";
+          e.preventDefault();
+        }
       }
     });
 
@@ -172,7 +198,20 @@
       if (pointers.size < 2) pinch = null;
       if (pointers.size === 0) {
         panStart = null;
-        if (st.s > 1) container.style.cursor = "grab";
+        // Welt-Zug abschließen: Pixel → Felder umrechnen und Zentrum verschieben.
+        if (worldDX !== 0 || worldDY !== 0) {
+          const cx = Math.round(-worldDX / CELL);
+          const cy = Math.round(-worldDY / CELL);
+          worldDX = 0;
+          worldDY = 0;
+          if ((cx || cy) && onWorldPan) {
+            onWorldPan(cx, cy); // löst Neuzeichnen mit neuem Zentrum aus
+          } else {
+            // Zu kleiner Zug: Vorschau zurücksetzen.
+            svg.style.transform = `translate(${st.tx}px, ${st.ty}px) scale(${st.s})`;
+          }
+        }
+        if (st.s > 1 || onWorldPan) container.style.cursor = "grab";
       }
     }
     container.addEventListener("pointerup", endPointer);

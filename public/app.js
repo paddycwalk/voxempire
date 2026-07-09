@@ -853,42 +853,70 @@ function garrisonHtml() {
 
 // Baut das HTML der Truppenbewegungen (ein- und ausgehend) — wird im Dorf- und Militär-Tab genutzt
 function movementsHtml() {
-  const inc = state.movements.incoming
-    .map(
-      (m) =>
-        `<div class="queue-item"><span class="red">⚠️ Angriff von ${esc(m.fromOwner)} (${esc(m.fromVillage)}, ${m.x}|${m.y})</span>${countdown(m.at)}</div>`,
-    )
-    .join("");
-  const out = state.movements.outgoing
-    .map((m) => {
-      // Sammelmissionen der Bewohner (kein Truppen-, sondern Arbeiter-Einsatz)
-      if (m.type === "gather" || m.type === "gatherReturn") {
-        const resName = RES_NAMES[m.res] || m.res;
-        const what =
-          m.type === "gather"
-            ? `👷 Sammeln: ${m.workers}× Bewohner → ${esc(m.target)} (${m.x}|${m.y})`
-            : `↩️ Bewohner kehren heim${m.yield ? ` · +${fmtNum(m.yield)} ${resName}` : ""}`;
-        return `<div class="queue-item"><span>${what}</span>${countdown(m.at)}</div>`;
-      }
-      const units = Object.entries(m.units)
-        .map(([k, n]) => `${n}× ${meta.UNITS[k].name}`)
-        .join(", ");
+  // Bewegungen werden nach Richtung gruppiert: "Auf dem Weg" (Hinweg) und "Kehren heim" (Rückweg).
+  // Jedes Element behält seine Ankunftszeit (at) für die spätere Sortierung.
+  const outgoing = []; // Auf dem Weg
+  const returning = []; // Kehren heim
+
+  // Eingehende Angriffe sind immer auf dem Weg zu uns.
+  for (const m of state.movements.incoming) {
+    outgoing.push({
+      at: m.at,
+      html: `<div class="queue-item"><span class="red">⚠️ Angriff von ${esc(m.fromOwner)} (${esc(m.fromVillage)}, ${m.x}|${m.y})</span>${countdown(m.at)}</div>`,
+    });
+  }
+
+  for (const m of state.movements.outgoing) {
+    // Sammelmissionen der Bewohner (kein Truppen-, sondern Arbeiter-Einsatz)
+    if (m.type === "gather" || m.type === "gatherReturn") {
+      const resName = RES_NAMES[m.res] || m.res;
       const what =
-        m.type === "attack"
-          ? `⚔️ Angriff auf ${esc(m.target)} (${m.x}|${m.y})`
-          : m.type === "scout"
-            ? `🔍 Spähen von ${esc(m.target)} (${m.x}|${m.y})`
-            : m.type === "reinforce"
-              ? `🤝 Verstärkung nach ${esc(m.target)} (${m.x}|${m.y})`
-              : `↩️ Rückkehr von ${esc(m.target)}`;
-      const loot = m.loot ? ` · Beute: ${costHtml(m.loot)}` : "";
-      const cancel =
-        (m.type === "attack" || m.type === "scout") && m.id
-          ? ` <button class="btn small danger" onclick="cancelMove('${m.id}')" title="Zurückbeordern">✖</button>`
-          : "";
-      return `<div class="queue-item"><span>${what} — ${units}${loot}</span>${countdown(m.at)}${cancel}</div>`;
-    })
-    .join("");
+        m.type === "gather"
+          ? `👷 Sammeln: ${m.workers}× Bewohner → ${esc(m.target)} (${m.x}|${m.y})`
+          : `↩️ Bewohner kehren heim${m.yield ? ` · +${fmtNum(m.yield)} ${resName}` : ""}`;
+      const item = {
+        at: m.at,
+        html: `<div class="queue-item"><span>${what}</span>${countdown(m.at)}</div>`,
+      };
+      (m.type === "gatherReturn" ? returning : outgoing).push(item);
+      continue;
+    }
+    const units = Object.entries(m.units)
+      .map(([k, n]) => `${n}× ${meta.UNITS[k].name}`)
+      .join(", ");
+    const what =
+      m.type === "attack"
+        ? `⚔️ Angriff auf ${esc(m.target)} (${m.x}|${m.y})`
+        : m.type === "scout"
+          ? `🔍 Spähen von ${esc(m.target)} (${m.x}|${m.y})`
+          : m.type === "reinforce"
+            ? `🤝 Verstärkung nach ${esc(m.target)} (${m.x}|${m.y})`
+            : `↩️ Rückkehr von ${esc(m.target)}`;
+    const loot = m.loot ? ` · Beute: ${costHtml(m.loot)}` : "";
+    const cancel =
+      (m.type === "attack" || m.type === "scout") && m.id
+        ? ` <button class="btn small danger" onclick="cancelMove('${m.id}')" title="Zurückbeordern">✖</button>`
+        : "";
+    const item = {
+      at: m.at,
+      html: `<div class="queue-item"><span>${what} — ${units}${loot}</span>${countdown(m.at)}${cancel}</div>`,
+    };
+    // "return" ist der Rückweg, alles andere (attack/scout/reinforce) ist der Hinweg.
+    (m.type === "return" ? returning : outgoing).push(item);
+  }
+
+  // Nach Ankunftszeit absteigend sortieren (späteste Ankunft zuerst).
+  const bySoonestDesc = (a, b) => b.at - a.at;
+  const section = (title, items) =>
+    items.length
+      ? `<div class="muted" style="margin:8px 0 4px;font-weight:600">${title}</div>` +
+        items
+          .sort(bySoonestDesc)
+          .map((i) => i.html)
+          .join("")
+      : "";
+  const outHtml = section("🏃 Auf dem Weg", outgoing);
+  const retHtml = section("🏠 Kehren heim", returning);
 
   // Eigene Truppen, die in fremden Dörfern stationiert sind (mit Rückruf).
   const stationed = (state.village.stationed || [])
@@ -912,7 +940,8 @@ function movementsHtml() {
     .join("");
 
   return (
-    inc + out + stationed + present || '<p class="muted">Keine Bewegungen.</p>'
+    outHtml + retHtml + stationed + present ||
+    '<p class="muted">Keine Bewegungen.</p>'
   );
 }
 
@@ -1160,7 +1189,7 @@ renderers.karte = async () => {
     </div>
     <div class="world-map">${mapSvg}</div>
     <div id="villageDetail" class="village-detail"></div>`;
-  enableZoomPan($(".world-map"), "map");
+  enableZoomPan($(".world-map"), "map", (dx, dy) => moveMap(dx, dy), 58);
 
   // Aus der Rangliste angesprungenes Dorf jetzt automatisch auswählen.
   if (pendingMapSelect) {
@@ -1704,6 +1733,32 @@ function renderOwnAlliance(a) {
     )
     .join("");
 
+  const isLeader = state.user.name === a.leader;
+  const reqs = a.requests || [];
+  const requestsCard =
+    isLeader && reqs.length
+      ? `
+    <div class="card">
+      <h3 style="margin-top:0">Beitrittsanfragen (${reqs.length})</h3>
+      <table>
+        <thead><tr><th>Spieler</th><th class="num">Punkte</th><th></th></tr></thead>
+        <tbody>${reqs
+          .map(
+            (r) => `
+          <tr>
+            <td><b>${esc(r.name)}</b></td>
+            <td class="num">${fmtNum(r.points)}</td>
+            <td>
+              <button class="btn small primary" onclick="allianceAction('accept','${r.id}')">Aufnehmen</button>
+              <button class="btn small danger" onclick="allianceAction('decline','${r.id}')">Ablehnen</button>
+            </td>
+          </tr>`,
+          )
+          .join("")}</tbody>
+      </table>
+    </div>`
+      : "";
+
   $("#tab-allianz").innerHTML = `
     <h2>[${esc(a.tag)}] ${esc(a.name)}</h2>
     <div class="card">
@@ -1713,7 +1768,8 @@ function renderOwnAlliance(a) {
         <tbody>${members}</tbody>
       </table>
       <div style="margin-top:14px"><button class="btn danger" onclick="allianceAction('leave')">Allianz verlassen</button></div>
-    </div>`;
+    </div>
+    ${requestsCard}`;
 }
 
 function renderAllianceLobby(list) {
@@ -1725,7 +1781,11 @@ function renderAllianceLobby(list) {
       <td><b>[${esc(a.tag)}]</b> ${esc(a.name)}</td>
       <td class="num">${a.memberCount}</td>
       <td class="num">${fmtNum(a.points)}</td>
-      <td><button class="btn small primary" onclick="allianceAction('join','${a.id}')">Beitreten</button></td>
+      <td>${
+        a.requested
+          ? `<button class="btn small" onclick="allianceAction('cancel','${a.id}')">Anfrage zurückziehen</button>`
+          : `<button class="btn small primary" onclick="allianceAction('join','${a.id}')">Beitritt anfragen</button>`
+      }</td>
     </tr>`,
         )
         .join("")
@@ -1757,6 +1817,10 @@ window.allianceAction = async (what, arg) => {
         name: $("#allyName").value,
       });
     else if (what === "join") await api("/api/alliance/join", { id: arg });
+    else if (what === "cancel") await api("/api/alliance/cancel", { id: arg });
+    else if (what === "accept") await api("/api/alliance/accept", { id: arg });
+    else if (what === "decline")
+      await api("/api/alliance/decline", { id: arg });
     else if (what === "leave") {
       await api("/api/alliance/leave", {});
       state.user.allianceTag = null;

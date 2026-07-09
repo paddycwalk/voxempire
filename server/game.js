@@ -1352,19 +1352,100 @@ export function allianceCreate(user, tag, name) {
   user.allianceId = id;
 }
 
-export function allianceJoin(user, id) {
+// Beitritt läuft über Anfragen: der Interessent stellt eine Anfrage, der
+// Anführer nimmt sie an oder lehnt sie ab.
+export function allianceRequestJoin(user, id) {
   if (user.allianceId) fail("Du bist bereits in einer Allianz.");
   const a = db.alliances[id] || fail("Allianz nicht gefunden.");
-  a.members.push(user.name.toLowerCase());
-  user.allianceId = id;
+  const key = user.name.toLowerCase();
+  if (db.allianceRequests.some((r) => r.allianceId === a.id && r.user === key))
+    fail("Deine Anfrage läuft bereits.");
+  db.allianceRequests.push({
+    id: nextId("ar"),
+    allianceId: a.id,
+    user: key,
+    userName: user.name,
+    time: Date.now(),
+  });
+  // Anführer benachrichtigen.
+  const leader = db.users[a.leader];
+  if (leader)
+    addReport(leader, {
+      time: Date.now(),
+      kind: "Allianz",
+      title: `${user.name} möchte [${a.tag}] beitreten`,
+      partner: user.name,
+    });
+}
+
+export function allianceCancelRequest(user, id) {
+  const key = user.name.toLowerCase();
+  const idx = db.allianceRequests.findIndex(
+    (r) => r.allianceId === id && r.user === key,
+  );
+  if (idx < 0) fail("Anfrage nicht gefunden.");
+  db.allianceRequests.splice(idx, 1);
+}
+
+export function allianceAcceptRequest(user, reqId) {
+  const a = db.alliances[user.allianceId] || fail("Du bist in keiner Allianz.");
+  if (a.leader !== user.name.toLowerCase())
+    fail("Nur der Anführer kann Anfragen bearbeiten.");
+  const idx = db.allianceRequests.findIndex(
+    (r) => r.id === reqId && r.allianceId === a.id,
+  );
+  if (idx < 0) fail("Anfrage nicht gefunden.");
+  const req = db.allianceRequests[idx];
+  const target = db.users[req.user] || fail("Spieler nicht gefunden.");
+  if (target.allianceId) {
+    // Interessent ist inzwischen woanders beigetreten — Anfrage verwerfen.
+    db.allianceRequests.splice(idx, 1);
+    fail("Der Spieler ist bereits in einer Allianz.");
+  }
+  db.allianceRequests.splice(idx, 1);
+  // Alle übrigen offenen Anfragen dieses Spielers entfernen.
+  db.allianceRequests = db.allianceRequests.filter((r) => r.user !== req.user);
+  a.members.push(req.user);
+  target.allianceId = a.id;
+  addReport(target, {
+    time: Date.now(),
+    kind: "Allianz",
+    title: `Du wurdest in [${a.tag}] ${a.name} aufgenommen`,
+    partner: user.name,
+  });
+}
+
+export function allianceDeclineRequest(user, reqId) {
+  const a = db.alliances[user.allianceId] || fail("Du bist in keiner Allianz.");
+  if (a.leader !== user.name.toLowerCase())
+    fail("Nur der Anführer kann Anfragen bearbeiten.");
+  const idx = db.allianceRequests.findIndex(
+    (r) => r.id === reqId && r.allianceId === a.id,
+  );
+  if (idx < 0) fail("Anfrage nicht gefunden.");
+  const req = db.allianceRequests[idx];
+  db.allianceRequests.splice(idx, 1);
+  const target = db.users[req.user];
+  if (target)
+    addReport(target, {
+      time: Date.now(),
+      kind: "Allianz",
+      title: `Deine Anfrage an [${a.tag}] wurde abgelehnt`,
+      partner: user.name,
+    });
 }
 
 export function allianceLeave(user) {
   const a = db.alliances[user.allianceId] || fail("Du bist in keiner Allianz.");
   a.members = a.members.filter((m) => m !== user.name.toLowerCase());
   user.allianceId = null;
-  if (a.members.length === 0) delete db.alliances[a.id];
-  else if (a.leader === user.name.toLowerCase()) a.leader = a.members[0];
+  if (a.members.length === 0) {
+    // Aufgelöste Allianz: offene Anfragen verwerfen.
+    db.allianceRequests = db.allianceRequests.filter(
+      (r) => r.allianceId !== a.id,
+    );
+    delete db.alliances[a.id];
+  } else if (a.leader === user.name.toLowerCase()) a.leader = a.members[0];
 }
 
 export function allianceKick(user, memberName) {
@@ -1384,6 +1465,7 @@ export function allianceKick(user, memberName) {
 export function allianceInfo(user) {
   if (!user.allianceId) return null;
   const a = db.alliances[user.allianceId];
+  const isLeader = a.leader === user.name.toLowerCase();
   return {
     id: a.id,
     tag: a.tag,
@@ -1403,16 +1485,33 @@ export function allianceInfo(user) {
         };
       })
       .sort((x, y) => y.points - x.points),
+    // Offene Beitrittsanfragen — nur der Anführer bekommt sie zu sehen.
+    requests: isLeader
+      ? db.allianceRequests
+          .filter((r) => r.allianceId === a.id)
+          .map((r) => {
+            const u = db.users[r.user];
+            const pts = u ? userPoints(u) : 0;
+            return { id: r.id, name: r.userName, points: pts, time: r.time };
+          })
+          .sort((x, y) => x.time - y.time)
+      : [],
   };
 }
 
-export function allianceList() {
+export function allianceList(user) {
+  const key = user ? user.name.toLowerCase() : null;
   return Object.values(db.alliances)
     .map((a) => ({
       id: a.id,
       tag: a.tag,
       name: a.name,
       memberCount: a.members.length,
+      requested: key
+        ? db.allianceRequests.some(
+            (r) => r.allianceId === a.id && r.user === key,
+          )
+        : false,
       points: a.members.reduce((sum, m) => {
         return sum + userPoints(db.users[m]);
       }, 0),

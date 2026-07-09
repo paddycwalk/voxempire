@@ -171,7 +171,7 @@ const routes = {
     fn: (u, b) => game.marketExchange(u, b.giveRes, b.wantRes, b.wantAmount),
   },
   "GET  /api/alliance": { auth: true, fn: (u) => game.allianceInfo(u) },
-  "GET  /api/alliances": { auth: true, fn: () => game.allianceList() },
+  "GET  /api/alliances": { auth: true, fn: (u) => game.allianceList(u) },
   "POST /api/alliance/create": {
     auth: true,
     fn: (u, b) => {
@@ -182,7 +182,28 @@ const routes = {
   "POST /api/alliance/join": {
     auth: true,
     fn: (u, b) => {
-      game.allianceJoin(u, b.id);
+      game.allianceRequestJoin(u, b.id);
+      return game.allianceList(u);
+    },
+  },
+  "POST /api/alliance/cancel": {
+    auth: true,
+    fn: (u, b) => {
+      game.allianceCancelRequest(u, b.id);
+      return game.allianceList(u);
+    },
+  },
+  "POST /api/alliance/accept": {
+    auth: true,
+    fn: (u, b) => {
+      game.allianceAcceptRequest(u, b.id);
+      return game.allianceInfo(u);
+    },
+  },
+  "POST /api/alliance/decline": {
+    auth: true,
+    fn: (u, b) => {
+      game.allianceDeclineRequest(u, b.id);
       return game.allianceInfo(u);
     },
   },
