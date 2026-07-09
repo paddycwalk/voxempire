@@ -3063,6 +3063,77 @@ window.shopBuyTest = async (itemId) => {
   }
 };
 
+// ---------------- Tab: Changelog ----------------
+// Neue Einträge oben ergänzen. Typen: "feature", "fix", "balance", "improvement".
+const CHANGELOG = [
+  {
+    version: "0.5.0",
+    date: "2026-07-09",
+    title: "Nebel des Krieges",
+    changes: [
+      {
+        type: "feature",
+        text: "Nebel des Krieges: Die Weltkarte ist verhüllt – nur erkundete Gebiete sind sichtbar.",
+      },
+      {
+        type: "feature",
+        text: "Erkundung: Klicke ein Nebelfeld an und schicke Späher, um die Umgebung dauerhaft aufzudecken.",
+      },
+      {
+        type: "feature",
+        text: "Spähzüge auf Dörfer decken jetzt zusätzlich deren Umgebung auf.",
+      },
+      {
+        type: "improvement",
+        text: "Schönere Nebel-Grafik mit weichen Wolkenschwaden und Hervorhebung des angeklickten Feldes.",
+      },
+      {
+        type: "fix",
+        text: "Karte verschieben (Ziehen bei Standard-Zoom) funktioniert wieder korrekt.",
+      },
+      {
+        type: "fix",
+        text: "Kein schwarzes Aufblitzen mehr beim Verschieben der Karte.",
+      },
+    ],
+  },
+];
+
+const CHANGE_TYPES = {
+  feature: { icon: "✨", label: "Neu", cls: "cl-feature" },
+  fix: { icon: "🐛", label: "Fix", cls: "cl-fix" },
+  balance: { icon: "⚖️", label: "Balance", cls: "cl-balance" },
+  improvement: { icon: "🔧", label: "Verbessert", cls: "cl-improve" },
+};
+
+renderers.changelog = () => {
+  const el = $("#tab-changelog");
+  if (!el) return;
+  const releases = CHANGELOG.map((rel, i) => {
+    const items = rel.changes
+      .map((c) => {
+        const t = CHANGE_TYPES[c.type] || CHANGE_TYPES.improvement;
+        return `<li class="cl-item">
+          <span class="cl-tag ${t.cls}">${t.icon} ${t.label}</span>
+          <span class="cl-text">${esc(c.text)}</span>
+        </li>`;
+      })
+      .join("");
+    const latest = i === 0 ? '<span class="cl-latest">Aktuell</span>' : "";
+    return `<div class="card cl-release">
+      <div class="cl-head">
+        <h3>Version ${esc(rel.version)}${rel.title ? ` — ${esc(rel.title)}` : ""} ${latest}</h3>
+        <span class="muted cl-date">${esc(rel.date)}</span>
+      </div>
+      <ul class="cl-list">${items}</ul>
+    </div>`;
+  }).join("");
+  el.innerHTML = `
+    <h2>🆕 Changelog</h2>
+    <p class="muted">Alle neuen Funktionen, Verbesserungen und Fehlerbehebungen von VOXEMPIRE.</p>
+    ${releases}`;
+};
+
 // ---------------- Tab: Profil ----------------
 
 renderers.profil = async () => {
