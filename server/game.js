@@ -2077,9 +2077,16 @@ export function getState(user) {
       // Sammelmissionen laufen zwischen eigenem Dorf und einem Rohstoffvorkommen.
       if (e.type === "gather" || e.type === "gatherReturn") {
         const outbound = e.type === "gather";
+        // Zeitpunkt der Heimkehr ins Dorf: beim Hinweg/Sammeln kommt noch der
+        // Rückweg (e.travel) obendrauf, beim Rückweg ist e.at bereits die Ankunft.
+        const homeAt = outbound
+          ? e.at +
+            (e.travel || gatherTravelMs(Math.hypot(v.x - e.x, v.y - e.y)))
+          : e.at;
         return {
           type: e.type,
           at: e.at,
+          homeAt,
           start: e.start || null,
           workers: e.workers,
           guards: e.guards || null,

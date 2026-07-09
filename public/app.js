@@ -874,9 +874,12 @@ function movementsHtml() {
         m.type === "gather"
           ? `👷 Sammeln: ${m.workers}× Bewohner → ${esc(m.target)} (${m.x}|${m.y})`
           : `↩️ Bewohner kehren heim${m.yield ? ` · +${fmtNum(m.yield)} ${resName}` : ""}`;
+      // Immer die Ankunft im Dorf anzeigen (auch während des Sammelns), damit
+      // nur eine durchgehende Zeit bis zur Heimkehr zu sehen ist.
+      const homeAt = m.homeAt || m.at;
       const item = {
-        at: m.at,
-        html: `<div class="queue-item"><span>${what}</span>${countdown(m.at)}</div>`,
+        at: homeAt,
+        html: `<div class="queue-item"><span>${what}</span>${countdown(homeAt)}</div>`,
       };
       (m.type === "gatherReturn" ? returning : outgoing).push(item);
       continue;
@@ -2574,7 +2577,7 @@ renderers.shop = async () => {
         <div class="shop-price">${it.price.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</div>
         ${
           shop.testMode
-            ? `<button class="btn primary" onclick="shopBuyTest('${it.id}')">Testkauf</button>`
+            ? `<button class="btn primary" disabled title="Nur mit hinterlegter PayPal-App verfügbar">Testkauf</button>`
             : `<div class="pp-buttons" id="pp-${it.id}" data-item="${it.id}" data-price="${it.price}"></div>`
         }
       </div>
