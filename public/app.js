@@ -492,6 +492,20 @@ function renderHeader() {
     fBadge.textContent = pending;
   }
 
+  const mBadge = $("#marketBadge");
+  if (mBadge) {
+    const offers = state.marketOffers || 0;
+    mBadge.classList.toggle("hidden", offers === 0);
+    mBadge.textContent = offers;
+  }
+
+  const cBadge = $("#chatBadge");
+  if (cBadge) {
+    const unread = state.unreadChat || 0;
+    cBadge.classList.toggle("hidden", unread === 0);
+    cBadge.textContent = unread;
+  }
+
   const q = state.quests;
   const lvlChip = $("#levelChip");
   if (lvlChip && q) {
@@ -1887,6 +1901,9 @@ renderers.chat = async () => {
       if (e.key === "Enter") sendChat();
     });
   }
+  // Chat geöffnet: Störer sofort entfernen (Server markiert als gelesen).
+  const cBadge = $("#chatBadge");
+  if (cBadge) cBadge.classList.add("hidden");
   await pollChat();
 };
 

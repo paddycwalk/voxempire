@@ -226,12 +226,12 @@ const routes = {
     },
   },
 
-  "GET  /api/chat": { auth: true, fn: () => game.getChat() },
+  "GET  /api/chat": { auth: true, fn: (u) => game.getChat(u) },
   "POST /api/chat": {
     auth: true,
     fn: (u, b) => {
       game.postChat(u, b.text);
-      return game.getChat();
+      return game.getChat(u);
     },
   },
 

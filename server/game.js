@@ -1643,7 +1643,9 @@ export function postChat(user, text) {
   return msg;
 }
 
-export function getChat() {
+export function getChat(user) {
+  // Öffnen des Chats markiert alle bisherigen Nachrichten als gelesen.
+  if (user) user.lastChatSeen = Date.now();
   return { messages: db.chat, serverTime: Date.now() };
 }
 
@@ -2248,6 +2250,14 @@ export function getState(user) {
     unreadReports: user.reports.filter((r) => !r.read).length,
     pendingFriendRequests: db.friendRequests.filter(
       (r) => r.to === user.name.toLowerCase(),
+    ).length,
+    // Fremde Angebote am Markt (die eigenen zählen nicht als Störer).
+    marketOffers: db.market.filter(
+      (o) => o.seller !== user.name.toLowerCase(),
+    ).length,
+    // Neue Chat-Nachrichten von anderen seit dem letzten Öffnen des Chats.
+    unreadChat: db.chat.filter(
+      (m) => m.time > (user.lastChatSeen || 0) && m.from !== user.name,
     ).length,
     quests: questSummary(user, v),
   };
