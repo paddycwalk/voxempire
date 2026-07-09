@@ -1048,6 +1048,17 @@ tr.unit-locked {
   gap: 14px;
   margin-bottom: 12px;
 }
+.bp-queue-note {
+  font-size: 13px;
+  color: var(--muted);
+  background: rgba(148, 163, 184, 0.1);
+  border-radius: 6px;
+  padding: 7px 10px;
+  margin-bottom: 12px;
+}
+.bp-queue-note b {
+  color: var(--blue);
+}
 .bp-build {
   width: 100%;
   text-align: center;
@@ -1155,7 +1166,7 @@ tr.unit-locked {
 }
 
 .world-map {
-  max-width: 760px;
+  max-width: 920px;
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 10px 34px rgba(0, 0, 0, 0.5);

@@ -782,10 +782,22 @@ function buildingPanelHtml() {
   } else if (maxed) {
     action = `<div class="bp-maxed">✦ Maximalstufe erreicht</div>`;
   } else {
+    // Bauzeit hängt allein an der Zielstufe des Gebäudes (b.nextTime). Läuft
+    // aber bereits ein Bauauftrag, startet dieser Ausbau erst danach — daher
+    // die reale Wartezeit (Warteschlange + eigene Bauzeit) transparent machen.
+    const queueEnd = v.queue.length
+      ? Math.max(...v.queue.map((it) => Number(it.done)))
+      : serverNow();
+    const waitMs = Math.max(0, queueEnd - serverNow());
+    const queueNote =
+      waitMs > 0
+        ? `<div class="bp-queue-note">⏳ Startet nach laufendem Ausbau — fertig in <b>${fmtDur(waitMs + b.nextTime)}</b></div>`
+        : "";
     action = `
       <div class="bp-next">
         <div class="bp-next-head"><span>Ausbau auf Stufe ${b.level + 1}</span><span class="duration">⏱ ${fmtDur(b.nextTime)}</span></div>
         <div class="cost big">${costHtml(b.nextCost, live)}</div>
+        ${queueNote}
         <button class="btn ${afford ? "primary" : ""} bp-build" ${afford ? "" : "disabled"} onclick="actionBuild('${key}')">
           ${afford ? `🔨 Ausbauen · ⏱ ${fmtDur(b.nextTime)}` : "Nicht genug Rohstoffe"}
         </button>
@@ -2309,7 +2321,7 @@ function renderFriendData(d) {
       <tr>
         <td>${f.online ? "🟢" : "⚫"} <b>${esc(f.name)}</b>${f.alliance ? ` <span class="muted">[${esc(f.alliance)}]</span>` : ""}</td>
         <td class="num">${fmtNum(f.points)}</td>
-        <td>${f.x != null ? `(${f.x}|${f.y})` : "—"}</td>
+        <td>${f.x != null ? `<a href="#" class="coord-link" title="Auf der Karte anzeigen" onclick="showOnMap(${f.x}, ${f.y}); return false;">(${f.x}|${f.y})</a>` : "—"}</td>
         <td class="muted">${f.online ? "online" : esc(relTime(f.lastSeen))}</td>
         <td><button class="btn small danger" onclick="friendRemove('${esc(f.name)}')">Entfernen</button></td>
       </tr>`,
@@ -2908,6 +2920,7 @@ renderers.rangliste = async () => {
       <td class="num">${i + 1}.</td>
       <td><b>${esc(p.name)}</b>${p.alliance ? ` <span class="muted">[${esc(p.alliance)}]</span>` : ""}</td>
       <td><a href="#" class="coord-link" title="Auf der Karte anzeigen" onclick="showOnMap(${p.x}, ${p.y}); return false;">(${p.x}|${p.y})</a></td>
+      <td class="num">${fmtNum(p.villages)}</td>
       <td class="num">${fmtNum(p.points)}</td>
       <td>${p.name === state.user.name || p.friend ? "" : `<button class="btn small" onclick="friendRequestFor('${esc(p.name)}')">🤝 Freund</button>`}</td>
     </tr>`,
@@ -2917,7 +2930,7 @@ renderers.rangliste = async () => {
     <h2>Rangliste</h2>
     <div class="card">
       <table>
-        <thead><tr><th class="num">#</th><th>Spieler</th><th>Dorf</th><th class="num">Punkte</th><th></th></tr></thead>
+        <thead><tr><th class="num">#</th><th>Spieler</th><th>Dorf</th><th class="num">Dörfer</th><th class="num">Punkte</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -3067,6 +3080,17 @@ window.shopBuyTest = async (itemId) => {
 // ---------------- Tab: Changelog ----------------
 // Neue Einträge oben ergänzen. Typen: "feature", "fix", "balance", "improvement".
 const CHANGELOG = [
+  {
+    version: "0.5.2",
+    date: "2026-07-09",
+    title: "Späher-Route aufdecken",
+    changes: [
+      {
+        type: "improvement",
+        text: "Späher decken jetzt ihre komplette Route auf, nicht mehr nur das Zielgebiet.",
+      },
+    ],
+  },
   {
     version: "0.5.1",
     date: "2026-07-09",

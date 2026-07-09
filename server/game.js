@@ -205,6 +205,8 @@ function ownedVillages(user) {
 const OWN_VISION = 3;
 // Radius, den ein Spähzug um sein Ziel dauerhaft aufdeckt.
 const SCOUT_REVEAL = 2;
+// Korridor-Radius (Chebyshev) entlang der Späher-Route, die mit aufgedeckt wird.
+const PATH_REVEAL = 1;
 
 // Persistent erkundete Felder eines Spielers als Set von "x,y"-Schlüsseln.
 function exploredSet(user) {
@@ -225,6 +227,31 @@ function markExplored(user, cx, cy, radius) {
         added = true;
       }
     }
+  }
+  if (added) user.explored = [...seen];
+}
+
+// Den kompletten Weg von (x0,y0) nach (x1,y1) als Korridor aufdecken – so sieht
+// der Spieler nicht nur das Ziel, sondern die ganze zurückgelegte Route.
+function markExploredPath(user, x0, y0, x1, y1, radius = PATH_REVEAL) {
+  const seen = exploredSet(user);
+  let added = false;
+  const add = (cx, cy) => {
+    for (let y = cy - radius; y <= cy + radius; y++) {
+      for (let x = cx - radius; x <= cx + radius; x++) {
+        if (x < 0 || y < 0 || x >= WORLD_SIZE || y >= WORLD_SIZE) continue;
+        const k = `${x},${y}`;
+        if (!seen.has(k)) {
+          seen.add(k);
+          added = true;
+        }
+      }
+    }
+  };
+  const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0)));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    add(Math.round(x0 + (x1 - x0) * t), Math.round(y0 + (y1 - y0) * t));
   }
   if (added) user.explored = [...seen];
 }
@@ -1092,7 +1119,10 @@ function resolveScout(ev, now) {
 
   // Die Späher haben das Zielgebiet erreicht: Umgebung dauerhaft aufdecken.
   const scoutOwner = db.users[av.owner];
-  if (scoutOwner) markExplored(scoutOwner, dv.x, dv.y, SCOUT_REVEAL);
+  if (scoutOwner) {
+    markExploredPath(scoutOwner, av.x, av.y, dv.x, dv.y);
+    markExplored(scoutOwner, dv.x, dv.y, SCOUT_REVEAL);
+  }
 
   const sent = ev.units.spaeher || 0;
   const defScouts = dv.units.spaeher || 0;
@@ -1187,7 +1217,10 @@ function resolveExplore(ev, now) {
   if (!av) return;
   touchVillage(av, now);
   const owner = db.users[av.owner];
-  if (owner) markExplored(owner, ev.tx, ev.ty, SCOUT_REVEAL);
+  if (owner) {
+    markExploredPath(owner, av.x, av.y, ev.tx, ev.ty);
+    markExplored(owner, ev.tx, ev.ty, SCOUT_REVEAL);
+  }
 
   const survivors = ev.units.spaeher || 0;
   if (survivors > 0) {
