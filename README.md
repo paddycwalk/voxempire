@@ -119,11 +119,12 @@ zusätzlich `PAYPAL_ENV=live` setzen.
   machen. Bei einem **Allianz-Handel** reist die Ware per **Handelskarre**
   zwischen den Dörfern — sie kommt erst nach der Reisezeit an (der Weltmarkt
   verrechnet weiterhin sofort).
-- **Allianzen**: Gründen oder beitreten (max. **10 Mitglieder**); Mitglieder
-  können einander nicht angreifen. Allianzmitglieder **teilen ihre Kartensicht**
-  (jeder sieht, was die Allianz bereits erkundet hat) und können über
-  **allianzinterne Marktangebote** direkt miteinander handeln. Allianz-Rangliste
-  inklusive.
+- **Allianzen**: Gründen oder per **Beitrittsanfrage** beitreten — der Anführer
+  bestätigt („Aufnehmen") oder lehnt sie ab, offene Anfragen erscheinen im
+  Allianz-Tab (max. **10 Mitglieder**). Mitglieder können einander nicht
+  angreifen, **teilen ihre Kartensicht** (jeder sieht, was die Allianz bereits
+  erkundet hat) und können über **allianzinterne Marktangebote** direkt
+  miteinander handeln. Allianz-Rangliste inklusive.
 - **Welt-Chat**: Öffentlicher Kanal, in dem alle Spieler in Echtzeit
   Nachrichten austauschen (letzte 100 Nachrichten bleiben erhalten).
 - **Aufträge & Stufe**: Eine feste Auftragskette führt durch den Spielaufbau
@@ -167,6 +168,13 @@ Neue Features und Änderungen werden hier festgehalten (neueste zuerst).
 
 ### 2026-07-09
 
+- **Dorf-Wechsel-Dropdown überarbeitet**: Das Menü zum Wechseln zwischen
+  eigenen Dörfern klappt jetzt immer zuverlässig nach unten auf und schließt
+  sich nicht mehr von selbst, während im Hintergrund neue Daten geladen werden
+  (auch in der Kartenansicht).
+- **Allianz-Beitrittsanfragen bestätigen**: Der Anführer sieht offene Anfragen
+  im Allianz-Tab und kann sie „Aufnehmen" oder „Ablehnen"; Interessenten können
+  eine gesendete Anfrage wieder zurückziehen.
 - **Bauzeiten transparent**: Das Bau-Panel zeigt jetzt zusätzlich die reale
   Fertigstellungszeit inklusive Wartezeit, falls bereits ein Ausbau läuft. Die
   reine Bauzeit hängt weiterhin allein an der Gebäudestufe (nicht am

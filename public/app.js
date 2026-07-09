@@ -42,6 +42,7 @@ let scoutIntel = {};
 let scoutIntelFetchedAt = 0; // Zeitpunkt des letzten Berichte-Abrufs für den Cache
 let pollTimer = null;
 let chatTimer = null; // eigener Poll-Timer, läuft nur wenn der Chat-Tab offen ist
+let villageMenuOpen = false; // Zustand des eigenen Dorf-Dropdowns (übersteht Polls)
 
 // ---------------- API ----------------
 
@@ -444,6 +445,78 @@ async function selectVillage(id) {
   }
 }
 
+// Eigenes Dorf-Dropdown rendern. Ersetzt das native <select>, damit das Menü
+// zuverlässig immer nach unten aufklappt und ein laufender State-Poll ein
+// bereits geöffnetes Menü nicht schließt (Neuaufbau nur, wenn nötig).
+function renderVillageSelect() {
+  const wrap = $("#villageSelect");
+  const btn = $("#villageSelectBtn");
+  const menu = $("#villageSelectMenu");
+  if (!wrap || !btn || !menu || !state || !state.villages) return;
+
+  const villages = state.villages;
+  const many = villages.length > 1;
+  wrap.classList.toggle("hidden", !many);
+  if (!many) {
+    closeVillageMenu();
+    return;
+  }
+
+  const active = villages.find((vv) => vv.active) || villages[0];
+  btn.innerHTML = `🏰 ${esc(active.name)} <span class="vs-caret">▾</span>`;
+  btn.title = `${active.name} (${active.x}|${active.y}) – Dorf wechseln`;
+
+  // Menüinhalt nur neu aufbauen, wenn sich die Dörferliste geändert hat.
+  const sig = villages.map((vv) => `${vv.id}:${vv.active ? 1 : 0}`).join(",");
+  if (menu.dataset.sig !== sig) {
+    menu.dataset.sig = sig;
+    menu.innerHTML = villages
+      .map(
+        (vv) =>
+          `<button type="button" class="vs-item${vv.active ? " active" : ""}" role="option" data-id="${vv.id}">🏰 ${esc(vv.name)} <small>(${vv.x}|${vv.y})</small></button>`,
+      )
+      .join("");
+    menu.querySelectorAll(".vs-item").forEach((el) => {
+      el.onclick = () => {
+        const id = el.dataset.id;
+        closeVillageMenu();
+        if (id && id !== String(active.id)) selectVillage(id);
+      };
+    });
+  }
+
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    villageMenuOpen ? closeVillageMenu() : openVillageMenu();
+  };
+}
+
+function openVillageMenu() {
+  const menu = $("#villageSelectMenu");
+  const btn = $("#villageSelectBtn");
+  if (!menu || !btn) return;
+  villageMenuOpen = true;
+  menu.classList.remove("hidden");
+  btn.setAttribute("aria-expanded", "true");
+}
+
+function closeVillageMenu() {
+  const menu = $("#villageSelectMenu");
+  const btn = $("#villageSelectBtn");
+  if (!menu || !btn) return;
+  villageMenuOpen = false;
+  menu.classList.add("hidden");
+  btn.setAttribute("aria-expanded", "false");
+}
+
+// Menü schließen bei Klick außerhalb oder Escape.
+document.addEventListener("pointerdown", (e) => {
+  if (villageMenuOpen && !e.target.closest("#villageSelect")) closeVillageMenu();
+});
+document.addEventListener("keydown", (e) => {
+  if (villageMenuOpen && e.key === "Escape") closeVillageMenu();
+});
+
 // Rohstoffe zwischen zwei Polls clientseitig hochzählen
 function liveRes(r) {
   const v = state.village;
@@ -472,20 +545,7 @@ function renderHeader() {
   }
 
   // Dorf-Auswahl: nur einblenden, wenn man mehr als ein Dorf besitzt.
-  const vsel = $("#villageSelect");
-  if (vsel && state.villages) {
-    const many = state.villages.length > 1;
-    vsel.classList.toggle("hidden", !many);
-    if (many) {
-      vsel.innerHTML = state.villages
-        .map(
-          (vv) =>
-            `<option value="${vv.id}" ${vv.active ? "selected" : ""}>🏰 ${esc(vv.name)} (${vv.x}|${vv.y})</option>`,
-        )
-        .join("");
-      vsel.onchange = () => selectVillage(vsel.value);
-    }
-  }
+  renderVillageSelect();
 
   const badge = $("#reportBadge");
   badge.classList.toggle("hidden", state.unreadReports === 0);
@@ -2136,8 +2196,35 @@ function renderOwnAlliance(a) {
     )
     .join("");
 
+  // Offene Beitrittsanfragen bekommt nur der Anführer vom Server geliefert.
+  const reqs = a.requests || [];
+  const reqRows = reqs
+    .map(
+      (r) => `
+    <tr>
+      <td><b>${esc(r.name)}</b></td>
+      <td class="num">${fmtNum(r.points)}</td>
+      <td class="ally-req-actions">
+        <button class="btn small primary" onclick="allianceAction('accept','${r.id}')">Aufnehmen</button>
+        <button class="btn small danger" onclick="allianceAction('decline','${r.id}')">Ablehnen</button>
+      </td>
+    </tr>`,
+    )
+    .join("");
+  const requestsCard = reqs.length
+    ? `
+    <div class="card">
+      <h3 style="margin-top:0">Beitrittsanfragen <span class="muted">(${reqs.length})</span></h3>
+      <table>
+        <thead><tr><th>Spieler</th><th class="num">Punkte</th><th></th></tr></thead>
+        <tbody>${reqRows}</tbody>
+      </table>
+    </div>`
+    : "";
+
   $("#tab-allianz").innerHTML = `
     <h2>[${esc(a.tag)}] ${esc(a.name)}</h2>
+    ${requestsCard}
     <div class="card">
       <p class="muted">Anführer: <b class="gold">${esc(a.leader)}</b> · ${a.members.length}/${a.maxMembers || 10} Mitglieder · Allianzmitglieder können einander nicht angreifen.</p>
       <table style="margin-top:10px">
@@ -2158,9 +2245,11 @@ function renderAllianceLobby(list) {
       <td class="num">${a.memberCount}/${a.maxMembers || 10}</td>
       <td class="num">${fmtNum(a.points)}</td>
       <td>${
-        a.memberCount >= (a.maxMembers || 10)
-          ? '<span class="muted">Voll</span>'
-          : `<button class="btn small primary" onclick="allianceAction('join','${a.id}')">Beitreten</button>`
+        a.requested
+          ? `<button class="btn small" onclick="allianceAction('cancel','${a.id}')">Anfrage zurückziehen</button>`
+          : a.memberCount >= (a.maxMembers || 10)
+            ? '<span class="muted">Voll</span>'
+            : `<button class="btn small primary" onclick="allianceAction('join','${a.id}')">Beitreten</button>`
       }</td>
     </tr>`,
         )
@@ -2187,18 +2276,34 @@ function renderAllianceLobby(list) {
 
 window.allianceAction = async (what, arg) => {
   try {
-    if (what === "create")
+    let msg = "Erledigt.";
+    if (what === "create") {
       await api("/api/alliance/create", {
         tag: $("#allyTag").value,
         name: $("#allyName").value,
       });
-    else if (what === "join") await api("/api/alliance/join", { id: arg });
-    else if (what === "leave") {
+      msg = "Allianz gegründet.";
+    } else if (what === "join") {
+      await api("/api/alliance/join", { id: arg });
+      msg = "Beitrittsanfrage gesendet — der Anführer muss sie bestätigen.";
+    } else if (what === "cancel") {
+      await api("/api/alliance/cancel", { id: arg });
+      msg = "Anfrage zurückgezogen.";
+    } else if (what === "accept") {
+      await api("/api/alliance/accept", { id: arg });
+      msg = "Mitglied aufgenommen.";
+    } else if (what === "decline") {
+      await api("/api/alliance/decline", { id: arg });
+      msg = "Anfrage abgelehnt.";
+    } else if (what === "leave") {
       await api("/api/alliance/leave", {});
       state.user.allianceTag = null;
-    } else if (what === "kick")
+      msg = "Allianz verlassen.";
+    } else if (what === "kick") {
       await api("/api/alliance/kick", { member: arg });
-    toast("Erledigt.");
+      msg = "Mitglied entfernt.";
+    }
+    toast(msg);
     renderers.allianz();
   } catch (e) {
     toast(e.message, true);
@@ -3152,6 +3257,32 @@ window.shopBuyTest = async (itemId) => {
 // ---------------- Tab: Changelog ----------------
 // Neue Einträge oben ergänzen. Typen: "feature", "fix", "balance", "improvement".
 const CHANGELOG = [
+  {
+    version: "0.6.3",
+    date: "2026-07-09",
+    title: "Dorf-Wechsel-Dropdown überarbeitet",
+    changes: [
+      {
+        type: "fix",
+        text: "Das Dropdown zum Wechseln zwischen eigenen Dörfern klappt jetzt immer zuverlässig nach unten auf und schließt sich nicht mehr von selbst, während im Hintergrund neue Daten geladen werden – auch in der Kartenansicht.",
+      },
+    ],
+  },
+  {
+    version: "0.6.2",
+    date: "2026-07-09",
+    title: "Allianz-Beitrittsanfragen bestätigen",
+    changes: [
+      {
+        type: "fix",
+        text: "Der Anführer sieht offene Beitrittsanfragen jetzt im Allianz-Tab und kann sie mit „Aufnehmen“ bestätigen oder „Ablehnen“.",
+      },
+      {
+        type: "improvement",
+        text: "Eine gesendete Beitrittsanfrage lässt sich in der Allianz-Übersicht wieder zurückziehen.",
+      },
+    ],
+  },
   {
     version: "0.6.1",
     date: "2026-07-09",

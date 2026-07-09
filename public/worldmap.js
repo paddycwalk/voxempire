@@ -479,6 +479,7 @@ function renderWorldMap(
     gather: "#b8860b",
     gatherReturn: "#4b7a3a",
     reinforce: "#2e8b8b",
+    transport: "#d9a441",
   };
   const unitTotal = (u) =>
     u ? Object.values(u).reduce((a, b) => a + (b || 0), 0) : 0;

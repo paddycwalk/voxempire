@@ -38,7 +38,10 @@
     <div id="gameScreen" class="game hidden">
       <header class="topbar">
         <div class="logo"><img src="logo.svg" alt="" width="26" height="26">VOX<span>EMPIRE</span></div>
-        <select id="villageSelect" class="village-select hidden" title="Dorf wechseln"></select>
+        <div id="villageSelect" class="village-select hidden">
+          <button id="villageSelectBtn" class="village-select-btn" type="button" title="Dorf wechseln" aria-haspopup="listbox" aria-expanded="false"></button>
+          <div id="villageSelectMenu" class="village-select-menu hidden" role="listbox"></div>
+        </div>
         <div class="resbar">
           <div class="res" data-tip="Holz (aktuell/Lagerkapazität)">
             <i>🪵</i>

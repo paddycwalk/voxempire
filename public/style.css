@@ -267,6 +267,10 @@ select:focus {
 
 /* Dorf-Auswahl in der Topbar (nur sichtbar bei mehreren Dörfern) */
 .village-select {
+  position: relative;
+  display: inline-flex;
+}
+.village-select-btn {
   background: linear-gradient(180deg, var(--panel2), var(--panel));
   color: var(--text);
   border: 1px solid var(--gold);
@@ -276,9 +280,64 @@ select:focus {
   font-weight: 600;
   cursor: pointer;
   max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-.village-select:hover {
+.village-select-btn:hover {
   border-color: #f0c65e;
+}
+.village-select-btn .vs-caret {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.8;
+}
+/* Menü klappt immer nach unten auf */
+.village-select-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  max-width: 280px;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  padding: 4px;
+  z-index: 1000;
+}
+.village-select-menu .vs-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.village-select-menu .vs-item small {
+  margin-left: auto;
+  opacity: 0.7;
+  font-weight: 500;
+}
+.village-select-menu .vs-item:hover {
+  background: var(--panel2);
+}
+.village-select-menu .vs-item.active {
+  color: var(--gold);
+  background: rgba(240, 198, 94, 0.12);
 }
 
 /* Adelungs-Fortschritt in der Dorf-Detailkarte auf der Weltkarte */
@@ -1419,6 +1478,11 @@ tr.unit-locked {
   color: var(--blue);
   font-size: 12px;
   white-space: nowrap;
+}
+.ally-req-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 /* ---------- Berichte ---------- */
