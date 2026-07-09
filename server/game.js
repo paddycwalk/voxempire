@@ -2337,12 +2337,12 @@ export function getState(user) {
       const other = db.villages[e.type === "return" ? e.from : e.to];
       // Rückkehr läuft zum eigenen Dorf, Angriff/Spähen vom eigenen Dorf weg.
       // Bei Erkundungs-Rückkehr fehlt ein Herkunfts-Dorf → Start-Koordinaten nutzen.
-      const fromX =
-        e.type === "return" ? (e.fromX ?? other?.x) : v.x;
-      const fromY =
-        e.type === "return" ? (e.fromY ?? other?.y) : v.y;
-      const toX = e.type === "return" ? v.x : e.type === "explore" ? e.tx : other?.x;
-      const toY = e.type === "return" ? v.y : e.type === "explore" ? e.ty : other?.y;
+      const fromX = e.type === "return" ? (e.fromX ?? other?.x) : v.x;
+      const fromY = e.type === "return" ? (e.fromY ?? other?.y) : v.y;
+      const toX =
+        e.type === "return" ? v.x : e.type === "explore" ? e.tx : other?.x;
+      const toY =
+        e.type === "return" ? v.y : e.type === "explore" ? e.ty : other?.y;
       return {
         type: e.type,
         at: e.at,

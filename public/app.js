@@ -1199,9 +1199,7 @@ renderers.karte = async () => {
 
   const R = 6;
   // Erkundete Felder (Nebel des Krieges): Server liefert sichtbare "x,y"-Schlüssel.
-  const explored = Array.isArray(data.explored)
-    ? new Set(data.explored)
-    : null;
+  const explored = Array.isArray(data.explored) ? new Set(data.explored) : null;
   const mapSvg = renderWorldMap(
     data.villages || [],
     data.nodes || [],
@@ -1211,6 +1209,7 @@ renderers.karte = async () => {
     selectedTile,
     selectedNode,
     explored,
+    selectedExplore,
   );
 
   const res = state.village.residents || { idle: 0, total: 0 };
@@ -1244,7 +1243,13 @@ renderers.karte = async () => {
     <div id="villageDetail" class="village-detail"></div>`;
   // panLimit = PAD(5) * CELL(58): so weit reicht der um das Fenster gerenderte
   // Puffer, so weit darf die Karten-Inhaltsebene beim Ziehen verschoben werden.
-  enableZoomPan($(".world-map"), "map", (dx, dy) => moveMap(dx, dy), 58, 5 * 58);
+  enableZoomPan(
+    $(".world-map"),
+    "map",
+    (dx, dy) => moveMap(dx, dy),
+    58,
+    5 * 58,
+  );
 
   // Aus der Rangliste angesprungenes Dorf jetzt automatisch auswählen.
   if (pendingMapSelect) {
@@ -1309,7 +1314,9 @@ window.exploreTile = (x, y) => {
   selectedExplore = { x, y };
   selectedTile = null;
   selectedNode = null;
-  renderExploreDetail();
+  // Karte neu zeichnen, damit das angeklickte Feld sofort hervorgehoben wird
+  // (die alte Karte bleibt dank Zwischenspeicher bis zum Nachladen stehen).
+  renderers.karte();
 };
 
 // ---- Erfolgsprognose (Angriff / Spähen) auf Basis eigener Spähberichte ----

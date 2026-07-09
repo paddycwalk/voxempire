@@ -253,7 +253,17 @@ function wmCompass(cx, cy, r) {
 }
 
 // ---------- Hauptfunktion ----------
-function renderWorldMap(tiles, nodes, center, R, state, selected, selNode, explored) {
+function renderWorldMap(
+  tiles,
+  nodes,
+  center,
+  R,
+  state,
+  selected,
+  selNode,
+  explored,
+  selExplore,
+) {
   const CELL = 58,
     M = 46;
   const N = 2 * R + 1;
@@ -271,7 +281,44 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode, explo
   // wird verdeckt. Ohne explored-Angabe (null) bleibt die Karte komplett offen.
   const fogOn = explored instanceof Set;
   const isSeen = (wx, wy) => !fogOn || explored.has(`${wx},${wy}`);
-  let fog = "";
+  const selKey = selExplore ? `${selExplore.x},${selExplore.y}` : null;
+  let fog = ""; // gefilterte Nebelschwaden (weiche Wolkenkanten)
+  let fogSel = ""; // scharfe Auswahl-Markierung über dem Nebel
+
+  // Eine Nebelkachel: dunkle Basisfläche + Wolkenwülste an den Rändern, die an
+  // bereits erkundete Nachbarfelder grenzen (klassischer Wolkenbank-Look).
+  const fogTile = (dx, dy, wx, wy) => {
+    const cx = px(dx),
+      cy = px(dy);
+    const ex = edge(dx),
+      ey = edge(dy);
+    let s = `<rect class="wm-fog-hit" x="${(ex - 1).toFixed(1)}" y="${(ey - 1).toFixed(1)}" width="${CELL + 2}" height="${CELL + 2}" fill="url(#wmFog)" onclick="exploreTile(${wx},${wy})"/>`;
+    // Deterministische Wolkenpuffs entlang der Kanten zu sichtbaren Nachbarn.
+    const puff = (bx, by, r) =>
+      `<circle cx="${bx.toFixed(1)}" cy="${by.toFixed(1)}" r="${r.toFixed(1)}" fill="url(#wmFogPuff)"/>`;
+    const rnd = (a, b) => 8 + wmHash(wx * a, wy * b) * 6; // Radius 8..14
+    if (isSeen(wx, wy - 1))
+      s +=
+        puff(cx - 15, ey, rnd(3.1, 7.7)) +
+        puff(cx + 2, ey, rnd(5.3, 1.9)) +
+        puff(cx + 17, ey, rnd(9.1, 4.3));
+    if (isSeen(wx, wy + 1))
+      s +=
+        puff(cx - 15, ey + CELL, rnd(2.7, 6.1)) +
+        puff(cx + 2, ey + CELL, rnd(8.3, 3.3)) +
+        puff(cx + 17, ey + CELL, rnd(4.9, 9.9));
+    if (isSeen(wx - 1, wy))
+      s +=
+        puff(ex, cy - 15, rnd(6.7, 2.3)) +
+        puff(ex, cy + 2, rnd(1.7, 8.9)) +
+        puff(ex, cy + 17, rnd(5.1, 3.7));
+    if (isSeen(wx + 1, wy))
+      s +=
+        puff(ex + CELL, cy - 15, rnd(7.3, 5.9)) +
+        puff(ex + CELL, cy + 2, rnd(2.9, 7.1)) +
+        puff(ex + CELL, cy + 17, rnd(9.7, 1.3));
+    return s;
+  };
 
   const byPos = {};
   for (const t of tiles) byPos[`${t.x},${t.y}`] = t;
@@ -295,7 +342,19 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode, explo
       // Unerkundetes Feld: kein Terrain zeichnen, stattdessen Nebelkachel.
       // Klickbar, um Späher zur Erkundung dorthin zu schicken.
       if (!isSeen(wx, wy)) {
-        fog += `<rect class="wm-fog-hit" x="${(edge(dx) - 1).toFixed(1)}" y="${(edge(dy) - 1).toFixed(1)}" width="${CELL + 2}" height="${CELL + 2}" fill="url(#wmFog)" onclick="exploreTile(${wx},${wy})"/>`;
+        fog += fogTile(dx, dy, wx, wy);
+        // Angeklicktes Nebelfeld hervorheben (scharfe Markierung über dem Nebel).
+        if (selKey === `${wx},${wy}`) {
+          const ex = edge(dx),
+            ey = edge(dy);
+          fogSel += `<g class="wm-fog-sel" pointer-events="none">
+            <rect x="${(ex + 2).toFixed(1)}" y="${(ey + 2).toFixed(1)}" width="${CELL - 4}" height="${CELL - 4}" rx="7" fill="${WM.gold}" opacity="0.14"/>
+            <rect x="${(ex + 2).toFixed(1)}" y="${(ey + 2).toFixed(1)}" width="${CELL - 4}" height="${CELL - 4}" rx="7" fill="none" stroke="${WM.gold}" stroke-width="2.6" stroke-dasharray="7 5">
+              <animate attributeName="stroke-dashoffset" from="24" to="0" dur="0.9s" repeatCount="indefinite"/>
+            </rect>
+            <text x="${px(dx).toFixed(1)}" y="${(px(dy) + 4).toFixed(1)}" text-anchor="middle" font-size="20" opacity="0.95">🧭</text>
+          </g>`;
+        }
         continue;
       }
 
@@ -506,14 +565,22 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode, explo
         <stop offset="0.6" stop-color="#000" stop-opacity="0"/>
         <stop offset="1" stop-color="${WM.inkD}" stop-opacity="0.32"/>
       </radialGradient>
-      <radialGradient id="wmFog" cx="0.5" cy="0.4" r="0.85">
-        <stop offset="0" stop-color="#4a4438"/>
-        <stop offset="1" stop-color="#2b2620"/>
+      <radialGradient id="wmFog" cx="0.5" cy="0.38" r="0.85">
+        <stop offset="0" stop-color="#514a3d"/>
+        <stop offset="0.55" stop-color="#3a342a"/>
+        <stop offset="1" stop-color="#211d16"/>
       </radialGradient>
-      <filter id="wmFogTex" x="-5%" y="-5%" width="110%" height="110%">
-        <feTurbulence type="fractalNoise" baseFrequency="0.035 0.045" numOctaves="3" seed="11" result="n"/>
-        <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.55  0 0 0 0 0.52  0 0 0 0 0.46  0 0 0 0.5 0" result="clouds"/>
-        <feComposite in="clouds" in2="SourceGraphic" operator="over"/>
+      <radialGradient id="wmFogPuff" cx="0.5" cy="0.5" r="0.5">
+        <stop offset="0" stop-color="#6b6252"/>
+        <stop offset="0.7" stop-color="#4a4336"/>
+        <stop offset="1" stop-color="#4a4336" stop-opacity="0"/>
+      </radialGradient>
+      <filter id="wmFogTex" x="-10%" y="-10%" width="120%" height="120%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.02 0.025" numOctaves="4" seed="11" result="n"/>
+        <feDisplacementMap in="SourceGraphic" in2="n" scale="14" xChannelSelector="R" yChannelSelector="G" result="warp"/>
+        <feGaussianBlur in="warp" stdDeviation="2.2" result="soft"/>
+        <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.62  0 0 0 0 0.58  0 0 0 0 0.5  0 0 0 0.35 0" result="clouds"/>
+        <feComposite in="clouds" in2="soft" operator="atop"/>
       </filter>
     </defs>
 
@@ -527,6 +594,7 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode, explo
     ${vills}
     ${moves}
     ${fog ? `<g class="wm-fog" filter="url(#wmFogTex)">${fog}</g>` : ""}
+    ${fogSel}
     </g>
     ${compass}
     <rect x="0" y="0" width="${W}" height="${W}" fill="url(#wmVignette)" pointer-events="none"/>

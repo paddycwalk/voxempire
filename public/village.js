@@ -291,11 +291,60 @@ function folk() {
   // Jede Route läuft über freie Hof-Kacheln (r ≥ 1), damit die Bewohner
   // vor der hinteren Gebäudereihe laufen. calcMode="paced" = konstante Geschw.
   const cfg = [
-    { r: [[1, 1], [3, 1], [3, 3], [1, 3]], t: VS.cloth1, h: "#4a3524", d: 26 },
-    { r: [[0, 1], [1, 1], [1, 2], [0, 3]], t: VS.cloth2, h: "#5a3a1e", d: 19 },
-    { r: [[4, 1], [4, 3], [3, 2]], t: VS.leaf, h: "#2a1c12", d: 16 },
-    { r: [[1, 3], [1, 4], [3, 4], [3, 3]], t: "#8a6d3b", h: "#6b4a2a", d: 23 },
-    { r: [[2, 1], [3, 2], [2, 3], [1, 2]], t: VS.plasterD, h: "#3a2a1a", d: 21 },
+    {
+      r: [
+        [1, 1],
+        [3, 1],
+        [3, 3],
+        [1, 3],
+      ],
+      t: VS.cloth1,
+      h: "#4a3524",
+      d: 26,
+    },
+    {
+      r: [
+        [0, 1],
+        [1, 1],
+        [1, 2],
+        [0, 3],
+      ],
+      t: VS.cloth2,
+      h: "#5a3a1e",
+      d: 19,
+    },
+    {
+      r: [
+        [4, 1],
+        [4, 3],
+        [3, 2],
+      ],
+      t: VS.leaf,
+      h: "#2a1c12",
+      d: 16,
+    },
+    {
+      r: [
+        [1, 3],
+        [1, 4],
+        [3, 4],
+        [3, 3],
+      ],
+      t: "#8a6d3b",
+      h: "#6b4a2a",
+      d: 23,
+    },
+    {
+      r: [
+        [2, 1],
+        [3, 2],
+        [2, 3],
+        [1, 2],
+      ],
+      t: VS.plasterD,
+      h: "#3a2a1a",
+      d: 21,
+    },
   ];
   return (
     `<g class="vs-folk">` +
