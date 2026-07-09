@@ -260,10 +260,15 @@ export function residentRegenMs() {
 // Wachen (Truppen) verteidigen die Bewohner; sind sie zu schwach, sterben
 // Bewohner (die dann im Rathaus regenerieren) und Wachen fallen.
 export const GATHER_AMBUSH_CHANCE = 0.3; // Wahrscheinlichkeit eines Überfalls pro Mission
+// Basis-/Ergiebigkeitsfaktor der Räuberstärke. Als Konstanten exportiert, damit
+// der Client dieselbe Prognose (Erfolgschance im Sammel-Formular) rechnen kann.
+export const BANDIT_BASE = 6;
+export const BANDIT_PER_RICH = 5;
 // Kampfkraft der Räuberbande – wächst mit Ergiebigkeit und Gruppengröße.
 export function banditPower(richness, workers) {
   return Math.round(
-    (6 + 5 * (richness || 1)) * Math.sqrt(Math.max(1, workers)),
+    (BANDIT_BASE + BANDIT_PER_RICH * (richness || 1)) *
+      Math.sqrt(Math.max(1, workers)),
   );
 }
 

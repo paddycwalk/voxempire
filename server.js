@@ -18,6 +18,8 @@ import {
   gatherWorkMs,
   residentRegenMs,
   GATHER_AMBUSH_CHANCE,
+  BANDIT_BASE,
+  BANDIT_PER_RICH,
 } from "./server/gamedata.js";
 import * as game from "./server/game.js";
 
@@ -65,6 +67,8 @@ const routes = {
         workMs: gatherWorkMs(),
         yieldPerWorker: 12 * SPEED,
         ambushChance: GATHER_AMBUSH_CHANCE,
+        banditBase: BANDIT_BASE,
+        banditPerRich: BANDIT_PER_RICH,
       },
       RESIDENT: {
         regenMs: residentRegenMs(),
@@ -109,6 +113,10 @@ const routes = {
   "POST /api/gather": {
     auth: true,
     fn: (u, b) => game.gather(u, Number(b.x), Number(b.y), b.workers, b.guards),
+  },
+  "POST /api/gather/recall": {
+    auth: true,
+    fn: (u, b) => game.recallGather(u, b.id),
   },
   "POST /api/reinforce": {
     auth: true,

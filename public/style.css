@@ -1290,6 +1290,41 @@ tr.unit-locked {
 }
 
 /* ---------- Berichte ---------- */
+/* Dorf-Ansicht: welches Dorf zeigt seine Berichte */
+.rvfilter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.rvfilter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel2);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s,
+    border-color 0.12s;
+}
+.rvfilter-chip:hover {
+  color: var(--text);
+  border-color: var(--gold);
+}
+.rvfilter-chip.active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #1a1305;
+}
 /* Kategorie-Filter (Tabs) über der Berichtsliste */
 .rfilter {
   display: flex;
@@ -1439,6 +1474,14 @@ tr.unit-locked {
 }
 .scout-row input {
   width: 90px;
+}
+/* Erfolgschance-Zeile (Spähen) */
+.chance-line {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
 }
 
 /* ---------- Notifications ---------- */

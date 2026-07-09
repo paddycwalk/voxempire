@@ -630,6 +630,36 @@ export function gather(user, x, y, workers, guards) {
   return { arrival: at };
 }
 
+// Laufende Sammelmission abbrechen: die Bewohner (und mitgeschickte Wachen)
+// kehren um und marschieren den bereits zurückgelegten Weg zurück zum Dorf —
+// ohne Rohstoffe (die Arbeit wurde abgebrochen).
+export function recallGather(user, id) {
+  const v = db.villages[user.villageId];
+  const ev = db.events.find((e) => e.id === id);
+  if (!ev || ev.type !== "gather" || ev.village !== v.id) {
+    fail("Diese Sammelmission kann nicht mehr abgebrochen werden.");
+  }
+  db.events = db.events.filter((e) => e !== ev);
+  const now = Date.now();
+  // Rückweg = bereits zurückgelegter Weg (begrenzt auf die einfache Reisezeit,
+  // falls die Bewohner schon am Vorkommen arbeiten).
+  const back = Math.min(now - (ev.start || now), ev.travel || 0);
+  db.events.push({
+    id: nextId("e"),
+    type: "gatherReturn",
+    at: now + back,
+    start: now,
+    village: v.id,
+    x: ev.x,
+    y: ev.y,
+    res: ev.res,
+    workers: ev.workers,
+    guards: ev.guards || {},
+    yield: 0,
+  });
+  return { arrival: now + back };
+}
+
 // Verstärkung in ein befreundetes Dorf schicken und dort stationieren.
 // Erlaubt für eigene weitere Dörfer und Allianzmitglieder. Die Truppen
 // verteidigen das Zieldorf mit und können zurückbeordert werden.
@@ -880,6 +910,7 @@ function resolveAttack(ev, now) {
   };
   addReport(attacker, {
     ...report,
+    villageId: av.id,
     title: conquest?.conquered
       ? `👑 ${dv.name} erobert!`
       : conquest
@@ -890,6 +921,7 @@ function resolveAttack(ev, now) {
   });
   addReport(defenderUser, {
     ...report,
+    villageId: dv.id,
     title: conquest?.conquered
       ? `😱 ${attacker.name} hat ${dv.name} erobert!`
       : conquest
@@ -1013,6 +1045,7 @@ function resolveScout(ev, now) {
   };
   addReport(db.users[av.owner], {
     ...report,
+    villageId: av.id,
     title: success
       ? `Spähbericht: ${dv.name}`
       : `Späher bei ${dv.name} abgefangen`,
@@ -1020,6 +1053,7 @@ function resolveScout(ev, now) {
   if (detected) {
     addReport(db.users[dv.owner], {
       ...report,
+      villageId: dv.id,
       title: success
         ? `${av.name} hat dich ausspioniert!`
         : `Feindliche Späher abgewehrt`,
@@ -1090,6 +1124,7 @@ function resolveReinforce(ev, now) {
       x: to.x,
       y: to.y,
       units: ev.units,
+      villageId: ev.from,
     });
   }
   if (host && host !== sender) {
@@ -1100,6 +1135,7 @@ function resolveReinforce(ev, now) {
       x: to.x,
       y: to.y,
       units: ev.units,
+      villageId: to.id,
     });
   }
 }
@@ -1132,6 +1168,7 @@ function resolveTransport(ev, now) {
       from: from ? from.name : "?",
       res: delivered,
       stock: resSnapshot(to),
+      villageId: ev.from,
     });
   }
 }
@@ -1205,6 +1242,7 @@ function resolveGather(ev, now) {
       residentsKilled,
       guardLost,
       repelled: ambush.repelled,
+      villageId: v.id,
     });
   }
 
@@ -1251,6 +1289,7 @@ function resolveGatherReturn(ev, now = Date.now()) {
     stored,
     wasted,
     stock: resSnapshot(v),
+    villageId: v.id,
   });
 }
 
@@ -1260,7 +1299,10 @@ function nodeLabel(res) {
 }
 
 function addReport(user, report) {
-  user.reports.unshift({ id: nextId("r"), read: false, ...report });
+  // villageId ordnet den Bericht einem Dorf des Empfängers zu.
+  // null = kontobezogen (Freundschaft, Markt, Allianz) → in jeder Dorf-Ansicht.
+  const villageId = report.villageId ?? null;
+  user.reports.unshift({ id: nextId("r"), read: false, ...report, villageId });
   if (user.reports.length > MAX_REPORTS) user.reports.length = MAX_REPORTS;
 }
 
@@ -2094,6 +2136,7 @@ export function getState(user) {
           guards: e.guards || null,
           res: e.res,
           yield: e.yield || null,
+          id: e.id,
           target:
             e.res === "holz"
               ? "Wald"

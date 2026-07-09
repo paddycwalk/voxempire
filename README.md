@@ -68,7 +68,9 @@ zusätzlich `PAYPAL_ENV=live` setzen.
   sind sie stark genug, wehren sie den Überfall ab; sonst **sterben Bewohner**.
   Gefallene Bewohner werden im **Rathaus nachgezogen** (1 alle 5 Minuten, bis
   wieder alle da sind). Auch bei einer verlorenen Verteidigung des Dorfes fallen
-  Bewohner.
+  Bewohner. Das Sammel-Formular zeigt eine **Erfolgschance in %** an (Bewohner
+  kehren unversehrt heim): 100 %, sobald deine Wachen die geschätzte Räuberstärke
+  übertreffen, sonst ~70 %.
 - **Verstärkung (Truppen abstellen)**: Klicke auf ein **eigenes weiteres Dorf**
   oder ein **Allianzmitglied** und entsende Truppen zur Unterstützung. Sie
   verteidigen das Zieldorf mit (Späher ausgenommen) und lassen sich jederzeit
@@ -79,6 +81,9 @@ zusätzlich `PAYPAL_ENV=live` setzen.
   Beide Seiten erhalten einen Kampfbericht. Die Stadtmauer des Verteidigers
   zählt auch, wenn er offline ist. Der Bericht zeigt Kräftevergleich,
   Verluste beider Seiten und die erbeutete Menge inklusive Tragekapazität.
+  Das Angriffs-Formular zeigt zudem eine geschätzte **Erfolgschance in %** —
+  berechnet aus deiner Angriffskraft und der zuletzt **erspähten** Verteidigung
+  (Truppen + Mauer) des Ziels. Ohne aktuelle Spähdaten bleibt sie unbekannt.
 - **Dörfer erobern (Adelung)**: Schicke einen **Paladin** in einen Angriff.
   Übersteht er einen **gewonnenen** Angriff, sinkt die Treue des fremden Dorfes
   um eine Stufe. Nach **3** solcher Paladin-Angriffe wechselt das Dorf den
@@ -97,6 +102,8 @@ zusätzlich `PAYPAL_ENV=live` setzen.
 - **Spähen**: Schicke Späher zu einem fremden Dorf, um dessen Rohstoffe und
   Truppen aufzudecken. Hat das Ziel eigene Späher, werden deine abgefangen —
   bei zu wenigen bekommst du keine Informationen und der Gegner wird gewarnt.
+  Kennst du die Späherzahl des Ziels aus einem früheren Bericht, zeigt das
+  Späh-Formular eine geschätzte **Erfolgschance in %** an.
 - **Truppen auf der Karte**: Bewegungen, die dein Dorf betreffen, werden auf der
   Weltkarte als wandernder Marker samt Route angezeigt — rot (Angriff),
   blau (Spähen), grün (Rückkehr), golden (Bewohner beim Sammeln). Der Marker

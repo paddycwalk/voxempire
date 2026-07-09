@@ -35,6 +35,10 @@ let mapCenter = null; // {x,y}
 let selectedTile = null;
 let selectedNode = null; // aktuell gewähltes Rohstoffvorkommen auf der Karte
 let pendingMapSelect = null; // {x,y}: nach dem Kartenwechsel dieses Dorf auswählen
+// Zuletzt erspähte Verteidigungsdaten je Zielkoordinate ("x,y") aus eigenen
+// Spähberichten – speist die Erfolgsprognose für Angriff & Spähen.
+let scoutIntel = {};
+let scoutIntelFetchedAt = 0; // Zeitpunkt des letzten Berichte-Abrufs für den Cache
 let pollTimer = null;
 let chatTimer = null; // eigener Poll-Timer, läuft nur wenn der Chat-Tab offen ist
 
@@ -431,6 +435,7 @@ async function selectVillage(id) {
     mapCenter = { x: state.village.x, y: state.village.y };
     selectedTile = null;
     selectedNode = null;
+    reportVillage = state.village.id; // Berichts-Ansicht folgt dem aktiven Dorf
     renderTab(activeTab);
     toast(`Aktives Dorf: ${state.village.name}`);
   } catch (e) {
@@ -891,9 +896,14 @@ function movementsHtml() {
       // Immer die Ankunft im Dorf anzeigen (auch während des Sammelns), damit
       // nur eine durchgehende Zeit bis zur Heimkehr zu sehen ist.
       const homeAt = m.homeAt || m.at;
+      // Laufende Hinweg-/Sammelmissionen lassen sich zurückholen.
+      const recall =
+        m.type === "gather" && m.id
+          ? ` <button class="btn small danger" onclick="recallGather('${m.id}')" title="Bewohner zurückholen">✖</button>`
+          : "";
       const item = {
         at: homeAt,
-        html: `<div class="queue-item"><span>${what}</span>${countdown(homeAt)}</div>`,
+        html: `<div class="queue-item"><span>${what}</span>${countdown(homeAt)}${recall}</div>`,
       };
       (m.type === "gatherReturn" ? returning : outgoing).push(item);
       continue;
@@ -1274,6 +1284,68 @@ window.selectNode = (n) => {
   renderNodeDetail();
 };
 
+// ---- Erfolgsprognose (Angriff / Spähen) auf Basis eigener Spähberichte ----
+
+// Spähberichte in den Koordinaten-Cache übernehmen (jeweils der neueste je Ziel).
+function indexScoutIntel(reports) {
+  scoutIntelFetchedAt = serverNow();
+  for (const r of reports || []) {
+    if (r.kind !== "Spionage" || !r.success || !r.intel) continue;
+    if (r.attacker?.name !== state.user.name) continue; // nur eigene Aufklärung
+    const d = r.defender || {};
+    if (typeof d.x !== "number" || typeof d.y !== "number") continue;
+    const key = `${d.x},${d.y}`;
+    const prev = scoutIntel[key];
+    if (!prev || r.time > prev.time) {
+      scoutIntel[key] = {
+        time: r.time,
+        wall: r.intel.wall || 0,
+        units: r.intel.units || {},
+        spaeher: r.intel.units?.spaeher || 0,
+      };
+    }
+  }
+}
+
+// Berichte bei Bedarf im Hintergrund laden, damit die Prognose auch ohne
+// Öffnen des Berichte-Tabs verfügbar ist. Läuft höchstens alle 20 s.
+async function ensureScoutIntel() {
+  if (serverNow() - scoutIntelFetchedAt < 20_000) return;
+  scoutIntelFetchedAt = serverNow();
+  try {
+    const reports = await api("/api/reports");
+    indexScoutIntel(reports);
+    if (selectedTile) {
+      window.updateTravelPreview?.();
+      window.updateScoutPreview?.();
+    }
+  } catch {
+    /* Prognose ist optional – Fehler still ignorieren */
+  }
+}
+
+// Effektive Verteidigung aus Spähdaten schätzen (Grundwert 20 + Einheiten-Def,
+// Mauer +6 %/Stufe) — spiegelt die Formel aus resolveAttack.
+function estimateDefense(intel) {
+  if (!intel) return null;
+  let def = 20;
+  for (const [k, n] of Object.entries(intel.units || {}))
+    def += (meta.UNITS[k]?.def || 0) * n;
+  return def * (1 + 0.06 * (intel.wall || 0));
+}
+
+// Erfolgs-Prozentwert aus einem Kräfteverhältnis (weiche Kurve um ratio = 1).
+function oddsPct(ratio, exp = 1.5) {
+  if (!(ratio > 0)) return 0;
+  const r = Math.pow(ratio, exp);
+  return Math.max(1, Math.min(99, Math.round((r / (r + 1)) * 100)));
+}
+
+// Farbklasse je nach Erfolgschance (rot < 40 % < gelb < 70 % < grün).
+function chanceClass(pct) {
+  return pct >= 70 ? "green" : pct >= 40 ? "gold" : "red";
+}
+
 function renderVillageDetail() {
   const t = selectedTile;
   const el = $("#villageDetail");
@@ -1320,10 +1392,11 @@ function renderVillageDetail() {
         <p class="muted small">Schicke Späher, um Rohstoffe und Truppen des Ziels auszukundschaften. Späher kämpfen nicht.</p>
         <div class="scout-row">
           <label>Späher (max. ${scoutMax})
-            <input type="number" min="0" max="${scoutMax}" value="0" id="scout-count">
+            <input type="number" min="0" max="${scoutMax}" value="0" id="scout-count" oninput="updateScoutPreview()">
           </label>
           <button class="btn" ${scoutMax ? "" : "disabled"} onclick="actionScout()">🔍 Späher losschicken</button>
         </div>
+        <div class="chance-line"><span class="muted">Erfolgschance</span> <b id="scoutChance">—</b></div>
         ${scoutMax ? "" : '<p class="muted small">Du hast keine Späher. Bilde sie in der Kaserne aus.</p>'}
       </div>`;
     attackForm = `
@@ -1334,7 +1407,9 @@ function renderVillageDetail() {
         <div><span class="muted">Reisezeit</span><b id="travelPreview" class="gold">—</b></div>
         <div><span class="muted">Angriffskraft</span><b id="atkPowerPreview" class="red">0</b></div>
         <div><span class="muted">Max. Beute</span><b id="lootPreview" class="green">0</b></div>
+        <div><span class="muted">Erfolgschance</span><b id="winChancePreview">—</b></div>
       </div>
+      <p class="muted small" id="winChanceHint">🔍 Erfolgschance unbekannt — spähe das Dorf zuerst aus.</p>
       <p class="muted small">Beute = Tragekapazität deiner Truppen. Wie viele Rohstoffe wirklich im Ziel liegen, siehst du erst im Kampfbericht — oder vorab per Spähen.</p>
       <button class="btn primary" onclick="actionAttack()">⚔️ Angriff starten</button>
       <p class="muted small">👑 <b>Adelung:</b> Schicke einen <b>Paladin</b> mit. Übersteht er einen gewonnenen Angriff, sinkt die Treue des Dorfes. Nach ${meta.CONQUEST_ATTACKS || 3} solcher Angriffe gehört das Dorf dir.</p>
@@ -1381,6 +1456,8 @@ function renderVillageDetail() {
       ${reinforceForm}
     </div>`;
   window.updateTravelPreview();
+  window.updateScoutPreview();
+  if (!own && !t.protected) ensureScoutIntel();
 }
 
 window.setAtkMax = (k, max) => {
@@ -1410,6 +1487,37 @@ window.updateTravelPreview = () => {
   const lootEl = $("#lootPreview");
   if (powerEl) powerEl.textContent = fmtNum(power);
   if (lootEl) lootEl.textContent = fmtNum(capacity) + " 🪵🪨⛓️";
+
+  // Erfolgschance aus den zuletzt erspähten Verteidigungsdaten schätzen.
+  const chanceEl = $("#winChancePreview");
+  const hintEl = $("#winChanceHint");
+  if (chanceEl) {
+    const intel = scoutIntel[`${selectedTile.x},${selectedTile.y}`];
+    const def = estimateDefense(intel);
+    if (def == null) {
+      chanceEl.textContent = "—";
+      chanceEl.className = "muted";
+      if (hintEl) {
+        hintEl.textContent =
+          "🔍 Erfolgschance unbekannt — spähe das Dorf zuerst aus.";
+        hintEl.classList.remove("hidden");
+      }
+    } else if (power <= 0) {
+      chanceEl.textContent = "—";
+      chanceEl.className = "muted";
+      if (hintEl) hintEl.classList.add("hidden");
+    } else {
+      const pct = oddsPct(power / def);
+      chanceEl.textContent = pct + " %";
+      chanceEl.className = chanceClass(pct);
+      if (hintEl) {
+        const age = fmtDur(Math.max(0, serverNow() - intel.time));
+        hintEl.textContent = `Schätzung auf Basis deiner Spähdaten (vor ${age}). Ohne aktuelle Aufklärung kann sich die Verteidigung geändert haben.`;
+        hintEl.classList.remove("hidden");
+      }
+    }
+  }
+
   if (!Number.isFinite(slowest)) {
     el.textContent = "—";
     return;
@@ -1419,6 +1527,28 @@ window.updateTravelPreview = () => {
     state.village.y - selectedTile.y,
   );
   el.textContent = fmtDur((dist / (slowest * meta.SPEED)) * 3_600_000);
+};
+
+// Erfolgschance des Spähzugs: Verteidiger-Späher haben 1,5× Vorteil.
+window.updateScoutPreview = () => {
+  const el = $("#scoutChance");
+  if (!el || !selectedTile) return;
+  const sent = Math.max(0, Number($("#scout-count")?.value || 0));
+  if (sent <= 0) {
+    el.textContent = "—";
+    el.className = "";
+    return;
+  }
+  const intel = scoutIntel[`${selectedTile.x},${selectedTile.y}`];
+  if (!intel) {
+    el.textContent = "🔍 unbekannt — erst spähen";
+    el.className = "muted small";
+    return;
+  }
+  const defScouts = intel.spaeher || 0;
+  const pct = defScouts <= 0 ? 99 : oddsPct(sent / (defScouts * 1.5), 1.2);
+  el.textContent = pct + " %";
+  el.className = chanceClass(pct);
 };
 
 window.actionAttack = async () => {
@@ -1503,6 +1633,22 @@ window.cancelMove = async (id) => {
   }
 };
 
+// Laufende Sammelmission abbrechen — Bewohner kehren ohne Rohstoffe zurück
+window.recallGather = async (id) => {
+  if (
+    !confirm("Sammelmission abbrechen? Die Bewohner kehren ohne Rohstoffe zurück.")
+  )
+    return;
+  try {
+    const r = await api("/api/gather/recall", { id });
+    toast(`Bewohner kehren zurück! Ankunft: ${fmtTime(r.arrival)}`);
+    await refreshState();
+    renderVillageDetail();
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
+
 // Detailkarte für ein Rohstoffvorkommen: Bewohner zum Sammeln losschicken.
 const NODE_META = {
   holz: { icon: "🌲", label: "Wald", res: "Holz" },
@@ -1558,7 +1704,9 @@ function renderNodeDetail() {
         <div><span class="muted">Dauer (hin+sammeln+zurück)</span><b id="gatherTime" class="gold">—</b></div>
         <div><span class="muted">Erwartete Beute</span><b id="gatherYield" class="green">0</b></div>
         <div><span class="muted">Wach-Verteidigung</span><b id="guardDef" class="blue">0</b></div>
+        <div><span class="muted">Erfolgschance</span><b id="gatherChance">—</b></div>
       </div>
+      <p class="muted small" id="gatherChanceHint"></p>
       ${idle ? "" : '<p class="muted small">Alle Bewohner sind unterwegs. Baue das Rathaus aus, um mehr Bewohner zu bekommen.</p>'}
     </div>`;
   window.updateGatherPreview();
@@ -1590,13 +1738,40 @@ window.updateGatherPreview = () => {
   }
   // Wach-Verteidigung aus den ausgewählten Truppen summieren.
   const gEl = $("#guardDef");
-  if (gEl) {
-    let def = 0;
-    for (const k of Object.keys(meta.UNITS)) {
-      const cnt = Number($("#guard-" + k)?.value || 0);
-      if (cnt > 0) def += (meta.UNITS[k].def || 0) * cnt;
+  let guardDef = 0;
+  for (const k of Object.keys(meta.UNITS)) {
+    const cnt = Number($("#guard-" + k)?.value || 0);
+    if (cnt > 0) guardDef += (meta.UNITS[k].def || 0) * cnt;
+  }
+  if (gEl) gEl.textContent = fmtNum(guardDef);
+
+  // Erfolgschance = Bewohner kehren unversehrt heim. Ein Überfall droht mit
+  // ambushChance; reichen die Wachen gegen die Räuberstärke, wird er abgewehrt.
+  const cEl = $("#gatherChance");
+  const hintEl = $("#gatherChanceHint");
+  if (cEl) {
+    const ambush = g.ambushChance ?? 0.3;
+    const base = g.banditBase ?? 6;
+    const perRich = g.banditPerRich ?? 5;
+    const bandit = Math.round(
+      (base + perRich * (selectedNode.richness || 1)) *
+        Math.sqrt(Math.max(1, n)),
+    );
+    const repelled = guardDef >= bandit;
+    const pct = n < 1 ? 0 : repelled ? 100 : Math.round((1 - ambush) * 100);
+    if (n < 1) {
+      cEl.textContent = "—";
+      cEl.className = "muted";
+      if (hintEl) hintEl.textContent = "";
+    } else {
+      cEl.textContent = pct + " %";
+      cEl.className = chanceClass(pct);
+      if (hintEl) {
+        hintEl.textContent = repelled
+          ? `🛡️ Deine Wachen (${fmtNum(guardDef)}) wehren die Räuber (Stärke ~${fmtNum(bandit)}) ab — Bewohner sicher.`
+          : `⚠️ Räuberstärke ~${fmtNum(bandit)} übersteigt deine Wachen (${fmtNum(guardDef)}). Bei einem Überfall (${Math.round(ambush * 100)} %) fallen Bewohner.`;
+      }
     }
-    gEl.textContent = fmtNum(def);
   }
 };
 
@@ -2249,6 +2424,9 @@ window.claimQuest = async (id) => {
 
 // Aktive Berichts-Kategorie (Tab-Filter). "Alle" = kein Filter.
 let reportFilter = "Alle";
+// Aktives Dorf für die Berichts-Ansicht. null = folgt dem aktiven Dorf,
+// "all" = Berichte aller Dörfer, sonst eine Dorf-ID.
+let reportVillage = null;
 
 // Nur Berichte der gewählten Kategorie zeigen, ohne neu vom Server zu laden.
 window.filterReports = (kind) => {
@@ -2261,6 +2439,13 @@ window.filterReports = (kind) => {
   });
 };
 
+// Dorf-Ansicht der Berichte wechseln: Kategorie zurücksetzen und neu rendern.
+window.filterReportVillage = (vid) => {
+  reportVillage = vid;
+  reportFilter = "Alle";
+  renderTab("berichte");
+};
+
 renderers.berichte = async () => {
   const el = $("#tab-berichte");
   el.innerHTML = '<h2>Berichte</h2><p class="muted">Lade …</p>';
@@ -2271,6 +2456,7 @@ renderers.berichte = async () => {
     el.innerHTML = `<p class="red">${e.message}</p>`;
     return;
   }
+  indexScoutIntel(reports);
   state.unreadReports = 0;
   $("#reportBadge").classList.add("hidden");
 
@@ -2518,9 +2704,36 @@ renderers.berichte = async () => {
     return genericReport(r);
   };
 
+  // ----- Dorf-Ansicht: Berichte nach Dorf trennen -----
+  const villages = state.villages || [];
+  // Ungültige/erste Auswahl auf das aktive Dorf zurücksetzen.
+  if (
+    reportVillage === null ||
+    (reportVillage !== "all" && !villages.some((vv) => vv.id === reportVillage))
+  ) {
+    reportVillage = state.village.id;
+  }
+  // Berichte eines Dorfes: dorfbezogene + kontobezogene (villageId == null).
+  const inVillage = (r) =>
+    reportVillage === "all" || r.villageId == null || r.villageId === reportVillage;
+  const scoped = reports.filter(inVillage);
+
+  const villageCount = (vid) =>
+    vid === "all"
+      ? reports.length
+      : reports.filter((r) => r.villageId === vid).length;
+  const vChip = (vid, label, count) =>
+    `<button class="rvfilter-chip${reportVillage === vid ? " active" : ""}" onclick="filterReportVillage('${vid}')">${label}<span class="rfilter-count">${count}</span></button>`;
+  const villageRow =
+    villages.length > 1
+      ? `<div class="rvfilter">${vChip("all", "🌍 Alle Dörfer", reports.length)}${villages
+          .map((vv) => vChip(vv.id, `🏰 ${esc(vv.name)}`, villageCount(vv.id)))
+          .join("")}</div>`
+      : "";
+
   // Wie viele Berichte je Kategorie? Bestimmt die verfügbaren Filter-Tabs.
   const counts = {};
-  for (const r of reports) {
+  for (const r of scoped) {
     const k = r.kind || "Kampf";
     counts[k] = (counts[k] || 0) + 1;
   }
@@ -2553,14 +2766,14 @@ renderers.berichte = async () => {
 
   const chip = (k, label, count) =>
     `<button class="rfilter-chip${reportFilter === k ? " active" : ""}" data-kind="${esc(k)}" onclick="filterReports(this.dataset.kind)">${label}<span class="rfilter-count">${count}</span></button>`;
-  const chipsHtml = reports.length
-    ? `<div class="rfilter">${chip("Alle", "📋 Alle", reports.length)}${presentKinds
+  const chipsHtml = scoped.length
+    ? `<div class="rfilter">${chip("Alle", "📋 Alle", scoped.length)}${presentKinds
         .map((k) => chip(k, `${KIND_ICON[k] || "📜"} ${k}`, counts[k]))
         .join("")}</div>`
     : "";
 
-  const items = reports.length
-    ? reports
+  const items = scoped.length
+    ? scoped
         .map((r) => {
           const kind = r.kind || "Kampf";
           const hidden =
@@ -2568,9 +2781,9 @@ renderers.berichte = async () => {
           return `<div class="report-wrap${hidden}" data-kind="${esc(kind)}">${renderReport(r)}</div>`;
         })
         .join("")
-    : '<p class="muted">Noch keine Berichte.</p>';
+    : '<p class="muted">Noch keine Berichte für dieses Dorf.</p>';
 
-  el.innerHTML = `<h2>Berichte</h2>${chipsHtml}${items}`;
+  el.innerHTML = `<h2>Berichte</h2>${villageRow}${chipsHtml}${items}`;
 };
 
 // ---------------- Tab: Rangliste ----------------
