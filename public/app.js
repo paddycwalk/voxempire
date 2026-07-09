@@ -1529,7 +1529,12 @@ function renderVillageDetail() {
     const rows = Object.entries(meta.UNITS)
       .filter(([, def]) => !def.scout)
       .map(([k, def]) =>
-        unitPickerCard(k, def, state.village.units[k]?.count || 0, `reinf-${k}`),
+        unitPickerCard(
+          k,
+          def,
+          state.village.units[k]?.count || 0,
+          `reinf-${k}`,
+        ),
       )
       .join("");
     reinforceForm = `
@@ -3147,6 +3152,66 @@ window.shopBuyTest = async (itemId) => {
 // ---------------- Tab: Changelog ----------------
 // Neue Einträge oben ergänzen. Typen: "feature", "fix", "balance", "improvement".
 const CHANGELOG = [
+  {
+    version: "0.6.1",
+    date: "2026-07-09",
+    title: "Allianz-Handel per Handelskarre",
+    changes: [
+      {
+        type: "feature",
+        text: "Allianzinterne Handelsgeschäfte werden jetzt per Handelskarre geliefert: Die Ware reist zwischen den Dörfern und kommt erst nach der Reisezeit an. Der Weltmarkt verrechnet weiterhin sofort.",
+      },
+      {
+        type: "improvement",
+        text: "Handelsbericht zeigt bei laufender Lieferung „Erwartet“ statt „Erhalten“ samt Ankunftszeit.",
+      },
+    ],
+  },
+  {
+    version: "0.6.0",
+    date: "2026-07-09",
+    title: "Allianz-Ausbau",
+    changes: [
+      {
+        type: "feature",
+        text: "Geteilte Kartensicht: Allianzmitglieder sehen gemeinsam, was die Allianz erkundet hat.",
+      },
+      {
+        type: "feature",
+        text: "Allianzinterne Marktangebote lassen sich „nur für die eigene Allianz“ sichtbar einstellen.",
+      },
+      {
+        type: "balance",
+        text: "Allianzen fassen maximal 10 Mitglieder (mit „x/10“-Anzeige, volle Allianzen sind nicht beitretbar).",
+      },
+    ],
+  },
+  {
+    version: "0.5.4",
+    date: "2026-07-09",
+    title: "Truppenauswahl & Wachen",
+    changes: [
+      {
+        type: "feature",
+        text: "Schnellauswahl bei allen Truppen-/Wachen-Auswahlen: Vorauswahl-Buttons 1/10/25/50/100 sowie ein „Max“-Button (Angriff, Verstärkung, Sammel-Wachen, Ausbildung).",
+      },
+      {
+        type: "improvement",
+        text: "Die Wachen-Auswahl bei Sammelmissionen ist im Militär-Stil gehalten (Porträt, Werte) und zeigt nur Einheiten, die du wirklich im Dorf hast.",
+      },
+    ],
+  },
+  {
+    version: "0.5.3",
+    date: "2026-07-09",
+    title: "Bauzeiten transparent",
+    changes: [
+      {
+        type: "fix",
+        text: "Läuft bereits ein Ausbau, zeigt das Bau-Panel jetzt die reale Fertigstellungszeit inklusive Wartezeit. Die reine Bauzeit hängt weiterhin allein an der Gebäudestufe, nicht am Spieler-Level.",
+      },
+    ],
+  },
   {
     version: "0.5.2",
     date: "2026-07-09",
