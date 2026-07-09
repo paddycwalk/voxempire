@@ -1229,7 +1229,9 @@ renderers.karte = async () => {
     </div>
     <div class="world-map">${mapSvg}</div>
     <div id="villageDetail" class="village-detail"></div>`;
-  enableZoomPan($(".world-map"), "map", (dx, dy) => moveMap(dx, dy), 58);
+  // panLimit = PAD(5) * CELL(58): so weit reicht der um das Fenster gerenderte
+  // Puffer, so weit darf die Karten-Inhaltsebene beim Ziehen verschoben werden.
+  enableZoomPan($(".world-map"), "map", (dx, dy) => moveMap(dx, dy), 58, 5 * 58);
 
   // Aus der Rangliste angesprungenes Dorf jetzt automatisch auswählen.
   if (pendingMapSelect) {
@@ -1636,7 +1638,9 @@ window.cancelMove = async (id) => {
 // Laufende Sammelmission abbrechen — Bewohner kehren ohne Rohstoffe zurück
 window.recallGather = async (id) => {
   if (
-    !confirm("Sammelmission abbrechen? Die Bewohner kehren ohne Rohstoffe zurück.")
+    !confirm(
+      "Sammelmission abbrechen? Die Bewohner kehren ohne Rohstoffe zurück.",
+    )
   )
     return;
   try {
@@ -2691,6 +2695,24 @@ renderers.berichte = async () => {
       </div>`;
   };
 
+  // Eroberungsbericht: eigenständige Meldung nach erfolgreicher Adelung.
+  const conquestReport = (r) => {
+    const mine = r.mine;
+    return `
+      <div class="card report ${mine ? "won" : "lost"}" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
+        <div class="rhead"><b>${mine ? "👑" : "🏳️"} ${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+        <div class="rbody hidden">
+          ${
+            mine
+              ? `<p class="green">Dein Paladin hat <b>${esc(r.village.name)}</b> (${r.village.x}|${r.village.y}) erobert — es gehört jetzt zu deinem Reich!</p>
+                 <p class="muted">Bisheriger Besitzer: ${esc(r.formerOwner)}</p>`
+              : `<p class="red">Du hast <b>${esc(r.village.name)}</b> (${r.village.x}|${r.village.y}) verloren.</p>
+                 <p class="muted">Neuer Besitzer: ${esc(r.conqueror.name)} (${esc(r.conqueror.village)}, ${r.conqueror.x}|${r.conqueror.y})</p>`
+          }
+        </div>
+      </div>`;
+  };
+
   // Bericht in die passende Kategorie einordnen und rendern.
   const renderReport = (r) => {
     const kind = r.kind || "Kampf";
@@ -2700,6 +2722,7 @@ renderers.berichte = async () => {
     if (kind === "Überfall") return raidReport(r);
     if (kind === "Verstärkung") return reinforceReport(r);
     if (kind === "Freundschaft") return friendReport(r);
+    if (kind === "Eroberung") return conquestReport(r);
     if (kind === "Kampf" && r.attacker) return battleReport(r);
     return genericReport(r);
   };
@@ -2715,7 +2738,9 @@ renderers.berichte = async () => {
   }
   // Berichte eines Dorfes: dorfbezogene + kontobezogene (villageId == null).
   const inVillage = (r) =>
-    reportVillage === "all" || r.villageId == null || r.villageId === reportVillage;
+    reportVillage === "all" ||
+    r.villageId == null ||
+    r.villageId === reportVillage;
   const scoped = reports.filter(inVillage);
 
   const villageCount = (vid) =>
@@ -2742,6 +2767,7 @@ renderers.berichte = async () => {
 
   const KIND_ICON = {
     Kampf: "⚔️",
+    Eroberung: "👑",
     Spionage: "🔍",
     Sammeln: "👷",
     Überfall: "🗡️",
@@ -2752,6 +2778,7 @@ renderers.berichte = async () => {
   };
   const KIND_ORDER = [
     "Kampf",
+    "Eroberung",
     "Spionage",
     "Sammeln",
     "Überfall",

@@ -968,7 +968,7 @@ function renderVillageScene(state, meta, selected) {
   const markerSvg = markers.join("");
 
   return `
-  <svg id="villageScene" viewBox="0 0 ${VBW} ${VBH}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Dorfansicht (isometrisch)">
+  <svg id="villageScene" viewBox="0 0 ${VBW} ${VBH}" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Dorfansicht (isometrisch)">
     <defs>
       <linearGradient id="vsSky" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="#8fb0c9"/><stop offset="0.55" stop-color="#aec5d4"/><stop offset="1" stop-color="#cdd6c8"/>

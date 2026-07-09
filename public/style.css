@@ -661,6 +661,19 @@ th.num {
   width: 100%;
   height: auto;
 }
+/* Auf schmalen Screens die Dorfansicht höher machen (Szene füllt statt schmalem Streifen) */
+@media (max-width: 900px) {
+  #villageScene {
+    height: 60vh;
+    min-height: 340px;
+  }
+}
+@media (max-width: 520px) {
+  #villageScene {
+    height: 56vh;
+    min-height: 300px;
+  }
+}
 
 /* ---------- Dorf: Gebäude-Raster (ersetzt die SVG-Szene) ---------- */
 .bld-grid {

@@ -931,6 +931,29 @@ function resolveAttack(ev, now) {
           : `Angriff von ${av.name} abgewehrt`,
   });
 
+  // Zusätzlicher Eroberungs-Bericht bei erfolgreicher Adelung (3. Paladin-Angriff).
+  if (conquest?.conquered) {
+    const conquestInfo = {
+      time: now,
+      kind: "Eroberung",
+      conqueror: { name: attacker.name, village: av.name, x: av.x, y: av.y },
+      village: { name: dv.name, x: dv.x, y: dv.y },
+      formerOwner: defenderUser.name,
+    };
+    addReport(attacker, {
+      ...conquestInfo,
+      villageId: dv.id,
+      mine: true,
+      title: `👑 Neues Dorf: ${dv.name} erobert!`,
+    });
+    addReport(defenderUser, {
+      ...conquestInfo,
+      villageId: null,
+      mine: false,
+      title: `🏳️ Dorf verloren: ${dv.name}`,
+    });
+  }
+
   if (won) questStat(attacker, "attacksWon", 1);
 
   if (Object.keys(survivors).length) {
@@ -972,7 +995,7 @@ function conquerVillage(av, dv, defenderUser, now) {
   const attacker = db.users[av.owner];
   dv.owner = attacker.name.toLowerCase();
   dv.conquest = null;
-  dv.protectedUntil = 0;
+  dv.protectedUntil = now + PROTECTION_MS; // Frisch erobertes Dorf erhält 24 h Schutz
   if (defenderUser.villageId === dv.id) {
     const remaining = ownedVillages(defenderUser);
     if (remaining.length) {
