@@ -2252,9 +2252,8 @@ export function getState(user) {
       (r) => r.to === user.name.toLowerCase(),
     ).length,
     // Fremde Angebote am Markt (die eigenen zählen nicht als Störer).
-    marketOffers: db.market.filter(
-      (o) => o.seller !== user.name.toLowerCase(),
-    ).length,
+    marketOffers: db.market.filter((o) => o.seller !== user.name.toLowerCase())
+      .length,
     // Neue Chat-Nachrichten von anderen seit dem letzten Öffnen des Chats.
     unreadChat: db.chat.filter(
       (m) => m.time > (user.lastChatSeen || 0) && m.from !== user.name,

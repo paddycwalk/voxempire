@@ -2247,6 +2247,20 @@ window.claimQuest = async (id) => {
   }
 };
 
+// Aktive Berichts-Kategorie (Tab-Filter). "Alle" = kein Filter.
+let reportFilter = "Alle";
+
+// Nur Berichte der gewählten Kategorie zeigen, ohne neu vom Server zu laden.
+window.filterReports = (kind) => {
+  reportFilter = kind;
+  document.querySelectorAll("#tab-berichte .report-wrap").forEach((w) => {
+    w.classList.toggle("hidden", kind !== "Alle" && w.dataset.kind !== kind);
+  });
+  document.querySelectorAll("#tab-berichte .rfilter-chip").forEach((c) => {
+    c.classList.toggle("active", c.dataset.kind === kind);
+  });
+};
+
 renderers.berichte = async () => {
   const el = $("#tab-berichte");
   el.innerHTML = '<h2>Berichte</h2><p class="muted">Lade …</p>';
@@ -2425,44 +2439,47 @@ renderers.berichte = async () => {
       </div>`;
   };
 
-  const items = reports.length
-    ? reports
-        .map((r) => {
-          if (r.kind === "Spionage") return spyReport(r);
-          if (r.kind === "Handel") return tradeReport(r);
-          if (r.kind === "Sammeln") return gatherReport(r);
-          if (r.kind === "Überfall") return raidReport(r);
-          if (r.kind === "Verstärkung") return reinforceReport(r);
-          if (r.kind === "Freundschaft") return friendReport(r);
-          const iAmAttacker = r.attacker.name === state.user.name;
-          const success = iAmAttacker ? r.won : !r.won;
-          const lootTotal = r.loot
-            ? r.loot.holz + r.loot.stein + r.loot.eisen
-            : 0;
-          let lootBlock = "";
-          if (r.won) {
-            const capNote =
-              r.capacity != null
-                ? ` <span class="muted">(${fmtNum(lootTotal)} von ${fmtNum(r.capacity)} Tragekapazität)</span>`
-                : "";
-            lootBlock = `<div class="rloot"><b>💰 Beute</b> ${lootTotal ? costHtml(r.loot) : '<span class="muted">nichts erbeutet</span>'}${capNote}</div>`;
-          } else {
-            lootBlock = `<div class="rloot"><b>💰 Beute</b> <span class="muted">Angriff abgewehrt — keine Beute</span></div>`;
-          }
-          const wallNote =
-            r.defender.wall != null && r.defender.wall > 0
-              ? ` · Stadtmauer Stufe ${r.defender.wall} (+${r.defender.wall * 6} % Verteidigung)`
-              : "";
-          const outcome = r.won
-            ? `<span class="green">Angreifer siegreich</span>`
-            : `<span class="red">Verteidiger siegreich</span>`;
-          let conquestBlock = "";
-          if (r.conquest) {
-            conquestBlock = r.conquest.conquered
-              ? `<div class="rloot"><b>👑 Adelung</b> <span class="green">Dorf erobert — es wechselt den Besitzer!</span></div>`
-              : `<div class="rloot"><b>👑 Adelung</b> Treue ${r.conquest.progress}/${r.conquest.needed} — noch ${Math.max(0, r.conquest.needed - r.conquest.progress)} Paladin-Angriff(e) bis zur Eroberung.</div>`;
-          }
-          return `
+  // Sammelbericht ohne bekannten Renderer (z. B. Transport): schlichte Karte
+  const genericReport = (r) => `
+      <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
+        <div class="rhead"><b>${esc(r.title || r.kind || "Bericht")}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+        <div class="rbody hidden">
+          ${r.from ? `<p class="muted">Von: ${esc(r.from)}</p>` : ""}
+          ${r.res ? `<div class="rloot"><b>📦 Rohstoffe</b> ${costHtml(r.res)}</div>` : ""}
+          ${r.stock ? `<div class="rloot"><b>📦 Lager jetzt</b> ${costHtml(r.stock)}</div>` : ""}
+          ${r.x != null ? `<p class="muted small">Ziel: (${r.x}|${r.y})</p>` : ""}
+        </div>
+      </div>`;
+
+  // Kampfbericht (Standard-Kategorie ohne eigenes kind-Feld)
+  const battleReport = (r) => {
+    const iAmAttacker = r.attacker.name === state.user.name;
+    const success = iAmAttacker ? r.won : !r.won;
+    const lootTotal = r.loot ? r.loot.holz + r.loot.stein + r.loot.eisen : 0;
+    let lootBlock = "";
+    if (r.won) {
+      const capNote =
+        r.capacity != null
+          ? ` <span class="muted">(${fmtNum(lootTotal)} von ${fmtNum(r.capacity)} Tragekapazität)</span>`
+          : "";
+      lootBlock = `<div class="rloot"><b>💰 Beute</b> ${lootTotal ? costHtml(r.loot) : '<span class="muted">nichts erbeutet</span>'}${capNote}</div>`;
+    } else {
+      lootBlock = `<div class="rloot"><b>💰 Beute</b> <span class="muted">Angriff abgewehrt — keine Beute</span></div>`;
+    }
+    const wallNote =
+      r.defender.wall != null && r.defender.wall > 0
+        ? ` · Stadtmauer Stufe ${r.defender.wall} (+${r.defender.wall * 6} % Verteidigung)`
+        : "";
+    const outcome = r.won
+      ? `<span class="green">Angreifer siegreich</span>`
+      : `<span class="red">Verteidiger siegreich</span>`;
+    let conquestBlock = "";
+    if (r.conquest) {
+      conquestBlock = r.conquest.conquered
+        ? `<div class="rloot"><b>👑 Adelung</b> <span class="green">Dorf erobert — es wechselt den Besitzer!</span></div>`
+        : `<div class="rloot"><b>👑 Adelung</b> Treue ${r.conquest.progress}/${r.conquest.needed} — noch ${Math.max(0, r.conquest.needed - r.conquest.progress)} Paladin-Angriff(e) bis zur Eroberung.</div>`;
+    }
+    return `
       <div class="card report ${success ? "won" : "lost"}" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
         <div class="rhead"><b>${success ? "✅" : "❌"} ${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">
@@ -2486,11 +2503,74 @@ renderers.berichte = async () => {
           </div>
         </div>
       </div>`;
+  };
+
+  // Bericht in die passende Kategorie einordnen und rendern.
+  const renderReport = (r) => {
+    const kind = r.kind || "Kampf";
+    if (kind === "Spionage") return spyReport(r);
+    if (kind === "Handel") return tradeReport(r);
+    if (kind === "Sammeln") return gatherReport(r);
+    if (kind === "Überfall") return raidReport(r);
+    if (kind === "Verstärkung") return reinforceReport(r);
+    if (kind === "Freundschaft") return friendReport(r);
+    if (kind === "Kampf" && r.attacker) return battleReport(r);
+    return genericReport(r);
+  };
+
+  // Wie viele Berichte je Kategorie? Bestimmt die verfügbaren Filter-Tabs.
+  const counts = {};
+  for (const r of reports) {
+    const k = r.kind || "Kampf";
+    counts[k] = (counts[k] || 0) + 1;
+  }
+  // Gewählte Kategorie zurücksetzen, wenn sie nicht mehr vorkommt.
+  if (reportFilter !== "Alle" && !counts[reportFilter]) reportFilter = "Alle";
+
+  const KIND_ICON = {
+    Kampf: "⚔️",
+    Spionage: "🔍",
+    Sammeln: "👷",
+    Überfall: "🗡️",
+    Handel: "⚖️",
+    Transport: "🛒",
+    Verstärkung: "🤝",
+    Freundschaft: "🫱",
+  };
+  const KIND_ORDER = [
+    "Kampf",
+    "Spionage",
+    "Sammeln",
+    "Überfall",
+    "Handel",
+    "Transport",
+    "Verstärkung",
+    "Freundschaft",
+  ];
+  const presentKinds = KIND_ORDER.filter((k) => counts[k]).concat(
+    Object.keys(counts).filter((k) => !KIND_ORDER.includes(k)),
+  );
+
+  const chip = (k, label, count) =>
+    `<button class="rfilter-chip${reportFilter === k ? " active" : ""}" data-kind="${esc(k)}" onclick="filterReports(this.dataset.kind)">${label}<span class="rfilter-count">${count}</span></button>`;
+  const chipsHtml = reports.length
+    ? `<div class="rfilter">${chip("Alle", "📋 Alle", reports.length)}${presentKinds
+        .map((k) => chip(k, `${KIND_ICON[k] || "📜"} ${k}`, counts[k]))
+        .join("")}</div>`
+    : "";
+
+  const items = reports.length
+    ? reports
+        .map((r) => {
+          const kind = r.kind || "Kampf";
+          const hidden =
+            reportFilter !== "Alle" && reportFilter !== kind ? " hidden" : "";
+          return `<div class="report-wrap${hidden}" data-kind="${esc(kind)}">${renderReport(r)}</div>`;
         })
         .join("")
     : '<p class="muted">Noch keine Berichte.</p>';
 
-  el.innerHTML = `<h2>Berichte</h2>${items}`;
+  el.innerHTML = `<h2>Berichte</h2>${chipsHtml}${items}`;
 };
 
 // ---------------- Tab: Rangliste ----------------

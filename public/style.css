@@ -1290,6 +1290,51 @@ tr.unit-locked {
 }
 
 /* ---------- Berichte ---------- */
+/* Kategorie-Filter (Tabs) über der Berichtsliste */
+.rfilter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.rfilter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s,
+    border-color 0.12s;
+}
+.rfilter-chip:hover {
+  color: var(--text);
+  border-color: var(--gold);
+}
+.rfilter-chip.active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #1a1305;
+}
+.rfilter-count {
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.rfilter-chip.active .rfilter-count {
+  background: rgba(0, 0, 0, 0.18);
+}
+.report-wrap.hidden {
+  display: none;
+}
 .report {
   border-left: 3px solid var(--border);
   cursor: pointer;
