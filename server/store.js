@@ -44,6 +44,7 @@ function emptyDb() {
     chat: [], // Welt-Chat: { id, from, text, time } (auf MAX_CHAT begrenzt)
     friends: {}, // nameLower -> [nameLower, …] (bestätigte Freundschaften, beidseitig)
     friendRequests: [], // { id, from, to, fromName, toName, time } (from/to = nameLower)
+    shopOrders: {}, // orderId -> { user, item, price, status, test, created, ... } (Item-Shop/PayPal)
   };
 }
 

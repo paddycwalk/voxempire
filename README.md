@@ -29,8 +29,17 @@ Beenden (Strg+C) gespeichert. Solange der Server läuft, läuft die Welt.
 | `VOX_SPEED`          | `3`         | Weltgeschwindigkeit (Produktion ×, Bau-/Reisezeiten ÷) |
 | `VOX_PROTECTION_MIN` | `1440`      | Anfängerschutz in Minuten (0 = aus)                    |
 | `VOX_DB`             | `./db.json` | Pfad zur Spielstand-Datei                              |
+| `PAYPAL_ENV`         | `sandbox`   | PayPal-Umgebung für den Item-Shop (`sandbox`/`live`)   |
+| `PAYPAL_CLIENT_ID`   | –           | Client-ID der PayPal-REST-App (aktiviert echte Zahlung) |
+| `PAYPAL_SECRET`      | –           | Secret der PayPal-REST-App                             |
 
 Beispiel für eine schnelle Testrunde: `VOX_SPEED=50 VOX_PROTECTION_MIN=1 node server.js`
+
+Der **Item-Shop** läuft ohne `PAYPAL_CLIENT_ID`/`PAYPAL_SECRET` im **Testmodus**
+(Käufe werden ohne echte Zahlung simuliert). Sind beide Variablen gesetzt, wird
+über PayPal (Orders v2 REST-API) echt bezahlt — Zugangsdaten gibt es im
+[PayPal-Developer-Dashboard](https://developer.paypal.com/). Für Echtgeld
+zusätzlich `PAYPAL_ENV=live` setzen.
 
 ## Spielprinzip
 
@@ -80,6 +89,11 @@ Beispiel für eine schnelle Testrunde: `VOX_SPEED=50 VOX_PROTECTION_MIN=1 node s
   oben in der Kopfleiste ein **Dropdown** zum Umschalten. Das gewählte Dorf ist
   aktiv für Ausbau, Ausbildung, Angriffe und Sammeln — genau wie dein Startdorf.
   Verliert ein Spieler sein letztes Dorf, bekommt er automatisch ein frisches.
+- **Rohstoffe zwischen eigenen Dörfern schicken**: Sobald du mehr als ein Dorf
+  besitzt, erscheint im **Marktplatz** eine Karte „Rohstoffe an eigenes Dorf
+  schicken". Wähle Zieldorf und Mengen — ein Handelskarren bringt die Ladung
+  hin (Reisezeit nach Entfernung), begrenzt durch das Lager des Zieldorfs.
+  Voraussetzung: ein Marktplatz im Absender-Dorf.
 - **Spähen**: Schicke Späher zu einem fremden Dorf, um dessen Rohstoffe und
   Truppen aufzudecken. Hat das Ziel eigene Späher, werden deine abgefangen —
   bei zu wenigen bekommst du keine Informationen und der Gegner wird gewarnt.
@@ -106,6 +120,13 @@ Beispiel für eine schnelle Testrunde: `VOX_SPEED=50 VOX_PROTECTION_MIN=1 node s
   direkt aus der Rangliste). Der Empfänger nimmt an oder lehnt ab; in der
   Freundesliste sieht man Punkte, Dorf und Online-Status seiner Freunde.
 - **Rangliste**: Punkte aus Gebäudestufen und Truppen.
+- **Item-Shop (Echtgeld)** 💎: Bonus-Artikel gegen echtes Geld per **PayPal**
+  kaufen — Rohstoffkisten (sofort Rohstoffe bis zur Lagergrenze),
+  Produktionsboost (verdoppelt die Rohstoffproduktion für 24 h bzw. 7 Tage,
+  Laufzeiten kumulieren) und der Sofort-Baumeister (stellt alle laufenden
+  Bauaufträge sofort fertig). Käufe schreibt der Server erst **nach bestätigter
+  Zahlung** dem aktiven Dorf gut. Ohne hinterlegte PayPal-App läuft der Shop im
+  **Testmodus** (Kauf ohne echte Zahlung, klar gekennzeichnet).
 - **Profil & Einstellungen**: Kontoübersicht (Punkte, Statistiken, Mitglied
   seit), Dorf umbenennen, Passwort ändern sowie lokale Einstellungen
   (Benachrichtigungen an/aus, Aktualisierungs-Intervall).

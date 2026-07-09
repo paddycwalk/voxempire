@@ -118,6 +118,10 @@ const routes = {
     auth: true,
     fn: (u, b) => game.recallReinforcement(u, b.targetId, b.fromId),
   },
+  "POST /api/transport": {
+    auth: true,
+    fn: (u, b) => game.sendResources(u, b.targetId, b.res),
+  },
 
   "GET  /api/map": {
     auth: true,
@@ -254,9 +258,17 @@ const routes = {
     auth: true,
     fn: (u, b) => game.claimQuest(u, b.id),
   },
-};
 
-function findRoute(method, pathname) {
+  "GET  /api/shop": { auth: true, fn: (u) => game.getShop(u) },
+  "POST /api/shop/order": {
+    auth: true,
+    fn: (u, b) => game.shopCreateOrder(u, b.itemId),
+  },
+  "POST /api/shop/capture": {
+    auth: true,
+    fn: (u, b) => game.shopCaptureOrder(u, b.orderId),
+  },
+};function findRoute(method, pathname) {
   for (const [key, route] of Object.entries(routes)) {
     const [m, p] = key.split(/\s+/);
     if (m === method && p === pathname) return route;
@@ -288,7 +300,7 @@ async function handleApi(req, res, url) {
     // Vor jeder Aktion fällige Kampf-Events abarbeiten, damit niemand
     // mit veralteten Truppenständen agiert.
     game.processEvents();
-    const result = route.fn(user, body, token, url.searchParams);
+    const result = await route.fn(user, body, token, url.searchParams);
     // null ist eine gültige Antwort (z. B. /api/alliance ohne Allianz) — nur undefined ersetzen.
     sendJson(res, 200, result === undefined ? {} : result);
   } catch (e) {

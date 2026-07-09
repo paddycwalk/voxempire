@@ -321,6 +321,17 @@ export function travelTimeMs(dist, unitCounts) {
   return Math.max(2000, Math.round((dist / (slowest * SPEED)) * 3_600_000));
 }
 
+// Geschwindigkeit der Handelskarren beim Rohstofftransport zwischen eigenen
+// Dörfern (Felder pro Stunde, wie UNITS.speed).
+export const MERCHANT_SPEED = 8;
+
+export function transportTimeMs(dist) {
+  return Math.max(
+    2000,
+    Math.round((dist / (MERCHANT_SPEED * SPEED)) * 3_600_000),
+  );
+}
+
 export function villagePoints(village) {
   let p = 0;
   for (const lvl of Object.values(village.buildings)) {
@@ -383,6 +394,15 @@ export const QUESTS = [
     xp: 20,
     reward: { holz: 120, stein: 120, eisen: 180 },
   },
+  {
+    id: "farm2",
+    reqLevel: 1,
+    name: "Volle Kornkammern",
+    desc: "Baue den Bauernhof auf Stufe 2 aus.",
+    metric: { kind: "building", key: "farm", target: 2 },
+    xp: 15,
+    reward: { holz: 150, stein: 120, eisen: 60 },
+  },
 
   {
     id: "lager3",
@@ -420,6 +440,24 @@ export const QUESTS = [
     xp: 30,
     reward: { holz: 250, stein: 250, eisen: 200 },
   },
+  {
+    id: "farm4",
+    reqLevel: 2,
+    name: "Ernährer des Dorfes",
+    desc: "Baue den Bauernhof auf Stufe 4 aus.",
+    metric: { kind: "building", key: "farm", target: 4 },
+    xp: 30,
+    reward: { holz: 300, stein: 250, eisen: 150 },
+  },
+  {
+    id: "speer10",
+    reqLevel: 2,
+    name: "Speerspitze",
+    desc: "Bilde 10 Speerträger aus.",
+    metric: { kind: "unit", key: "speer", target: 10 },
+    xp: 30,
+    reward: { holz: 300, stein: 200, eisen: 250 },
+  },
 
   {
     id: "mauer3",
@@ -447,6 +485,24 @@ export const QUESTS = [
     metric: { kind: "points", target: 400 },
     xp: 40,
     reward: { holz: 400, stein: 400, eisen: 300 },
+  },
+  {
+    id: "bogen10",
+    reqLevel: 3,
+    name: "Pfeilhagel",
+    desc: "Bilde 10 Bogenschützen aus.",
+    metric: { kind: "unit", key: "bogen", target: 10 },
+    xp: 40,
+    reward: { holz: 350, stein: 300, eisen: 350 },
+  },
+  {
+    id: "gather1500",
+    reqLevel: 3,
+    name: "Reiche Ernte",
+    desc: "Sammle insgesamt 1500 Rohstoffe mit Bewohnern.",
+    metric: { kind: "gathered", target: 1500 },
+    xp: 45,
+    reward: { holz: 450, stein: 450, eisen: 350 },
   },
 
   {
@@ -476,6 +532,24 @@ export const QUESTS = [
     xp: 70,
     reward: { holz: 700, stein: 700, eisen: 700 },
   },
+  {
+    id: "mauer6",
+    reqLevel: 4,
+    name: "Bollwerk",
+    desc: "Baue die Stadtmauer auf Stufe 6.",
+    metric: { kind: "building", key: "mauer", target: 6 },
+    xp: 60,
+    reward: { holz: 500, stein: 800, eisen: 350 },
+  },
+  {
+    id: "reiter10",
+    reqLevel: 4,
+    name: "Berittene Elite",
+    desc: "Bilde 10 Reiter aus.",
+    metric: { kind: "unit", key: "reiter", target: 10 },
+    xp: 65,
+    reward: { holz: 600, stein: 500, eisen: 700 },
+  },
 
   {
     id: "rathaus10",
@@ -494,6 +568,164 @@ export const QUESTS = [
     metric: { kind: "points", target: 1500 },
     xp: 120,
     reward: { holz: 1500, stein: 1500, eisen: 1200 },
+  },
+  {
+    id: "army100",
+    reqLevel: 5,
+    name: "Große Streitmacht",
+    desc: "Unterhalte insgesamt 100 Truppen.",
+    metric: { kind: "units", target: 100 },
+    xp: 110,
+    reward: { holz: 1200, stein: 1000, eisen: 1300 },
+  },
+  {
+    id: "attack15",
+    reqLevel: 5,
+    name: "Gefürchteter Feldherr",
+    desc: "Gewinne 15 Angriffe.",
+    metric: { kind: "attacksWon", target: 15 },
+    xp: 130,
+    reward: { holz: 1400, stein: 1400, eisen: 1400 },
+  },
+
+  {
+    id: "markt5",
+    reqLevel: 6,
+    name: "Handelszentrum",
+    desc: "Baue den Marktplatz auf Stufe 5 aus.",
+    metric: { kind: "building", key: "markt", target: 5 },
+    xp: 140,
+    reward: { holz: 1600, stein: 1500, eisen: 1300 },
+  },
+  {
+    id: "paladin5",
+    reqLevel: 6,
+    name: "Heilige Ritter",
+    desc: "Bilde 5 Paladine aus.",
+    metric: { kind: "unit", key: "paladin", target: 5 },
+    xp: 160,
+    reward: { holz: 1500, stein: 1500, eisen: 2000 },
+  },
+  {
+    id: "gather10000",
+    reqLevel: 6,
+    name: "Schatzmeister",
+    desc: "Sammle insgesamt 10.000 Rohstoffe mit Bewohnern.",
+    metric: { kind: "gathered", target: 10000 },
+    xp: 150,
+    reward: { holz: 1800, stein: 1800, eisen: 1500 },
+  },
+
+  {
+    id: "rathaus15",
+    reqLevel: 7,
+    name: "Prunkvolle Residenz",
+    desc: "Baue das Rathaus auf Stufe 15 aus.",
+    metric: { kind: "building", key: "rathaus", target: 15 },
+    xp: 200,
+    reward: { holz: 2500, stein: 2500, eisen: 2000 },
+  },
+  {
+    id: "army200",
+    reqLevel: 7,
+    name: "Heerführer",
+    desc: "Unterhalte insgesamt 200 Truppen.",
+    metric: { kind: "units", target: 200 },
+    xp: 210,
+    reward: { holz: 2400, stein: 2000, eisen: 2600 },
+  },
+  {
+    id: "points3000",
+    reqLevel: 7,
+    name: "Großmacht",
+    desc: "Erreiche 3000 Dorfpunkte.",
+    metric: { kind: "points", target: 3000 },
+    xp: 220,
+    reward: { holz: 2800, stein: 2800, eisen: 2400 },
+  },
+
+  {
+    id: "attack40",
+    reqLevel: 8,
+    name: "Eroberer",
+    desc: "Gewinne 40 Angriffe.",
+    metric: { kind: "attacksWon", target: 40 },
+    xp: 280,
+    reward: { holz: 3500, stein: 3500, eisen: 3500 },
+  },
+  {
+    id: "points6000",
+    reqLevel: 8,
+    name: "Legende der Welt",
+    desc: "Erreiche 6000 Dorfpunkte.",
+    metric: { kind: "points", target: 6000 },
+    xp: 320,
+    reward: { holz: 4000, stein: 4000, eisen: 3500 },
+  },
+  {
+    id: "mauer10",
+    reqLevel: 8,
+    name: "Uneinnehmbar",
+    desc: "Baue die Stadtmauer auf Stufe 10.",
+    metric: { kind: "building", key: "mauer", target: 10 },
+    xp: 260,
+    reward: { holz: 3000, stein: 4500, eisen: 2500 },
+  },
+  {
+    id: "paladin20",
+    reqLevel: 8,
+    name: "Orden der Paladine",
+    desc: "Bilde 20 Paladine aus.",
+    metric: { kind: "unit", key: "paladin", target: 20 },
+    xp: 300,
+    reward: { holz: 3200, stein: 3200, eisen: 4500 },
+  },
+
+  {
+    id: "rathaus20",
+    reqLevel: 9,
+    name: "Kaiserpfalz",
+    desc: "Baue das Rathaus auf Stufe 20 aus.",
+    metric: { kind: "building", key: "rathaus", target: 20 },
+    xp: 400,
+    reward: { holz: 5000, stein: 5000, eisen: 4000 },
+  },
+  {
+    id: "army400",
+    reqLevel: 9,
+    name: "Gewaltiges Heer",
+    desc: "Unterhalte insgesamt 400 Truppen.",
+    metric: { kind: "units", target: 400 },
+    xp: 420,
+    reward: { holz: 4800, stein: 4000, eisen: 5200 },
+  },
+  {
+    id: "gather50000",
+    reqLevel: 9,
+    name: "Reichtum ohne Grenzen",
+    desc: "Sammle insgesamt 50.000 Rohstoffe mit Bewohnern.",
+    metric: { kind: "gathered", target: 50000 },
+    xp: 380,
+    reward: { holz: 5000, stein: 5000, eisen: 4500 },
+  },
+
+  {
+    id: "attack80",
+    reqLevel: 10,
+    name: "Schrecken der Nachbarn",
+    desc: "Gewinne 80 Angriffe.",
+    metric: { kind: "attacksWon", target: 80 },
+    xp: 500,
+    reward: { holz: 6500, stein: 6500, eisen: 6500 },
+  },
+  {
+    id: "points12000",
+    reqLevel: 10,
+    name: "Herrscher der Welt",
+    desc: "Erreiche 12000 Dorfpunkte.",
+    metric: { kind: "points", target: 12000 },
+    xp: 600,
+    reward: { holz: 8000, stein: 8000, eisen: 7000 },
   },
 ];
 
@@ -514,3 +746,55 @@ export function levelForXp(xp) {
   }
   return { level, into: xp - acc, need: xpToNext(level) };
 }
+
+// ---------- Item-Shop (Echtgeld / PayPal) ----------
+// Preise in EUR. Käufe werden serverseitig nach bestätigter PayPal-Zahlung
+// gutgeschrieben (siehe server/game.js grantShopItem). Neue Artikel: hier
+// eintragen — der Shop-Tab rendert automatisch aus dieser Tabelle.
+//   type "resources": amount wird sofort gutgeschrieben (bis Lagerkapazität)
+//   type "boost":     mult × Produktion für durationMs (Echtzeit, kumuliert)
+//   type "finish":    stellt alle laufenden Bauaufträge sofort fertig
+export const SHOP_CURRENCY = "EUR";
+export const SHOP_ITEMS = {
+  pack_small: {
+    name: "Rohstoffkiste (klein)",
+    desc: "Sofort +1.500 Holz, Stein und Eisen (bis zur Lagerkapazität).",
+    icon: "📦",
+    price: 0.99,
+    type: "resources",
+    amount: { holz: 1500, stein: 1500, eisen: 1500 },
+  },
+  pack_big: {
+    name: "Rohstoffkiste (groß)",
+    desc: "Sofort +8.000 Holz, Stein und Eisen (bis zur Lagerkapazität).",
+    icon: "🎁",
+    price: 3.99,
+    type: "resources",
+    amount: { holz: 8000, stein: 8000, eisen: 8000 },
+  },
+  boost_1d: {
+    name: "Produktionsboost — 24 Stunden",
+    desc: "Verdoppelt die Rohstoffproduktion aller Minen für 24 Stunden.",
+    icon: "⚡",
+    price: 1.99,
+    type: "boost",
+    mult: 2,
+    durationMs: 24 * 3_600_000,
+  },
+  boost_7d: {
+    name: "Produktionsboost — 7 Tage",
+    desc: "Verdoppelt die Rohstoffproduktion aller Minen für 7 Tage.",
+    icon: "🔥",
+    price: 7.99,
+    type: "boost",
+    mult: 2,
+    durationMs: 7 * 24 * 3_600_000,
+  },
+  finish_builds: {
+    name: "Sofort-Baumeister",
+    desc: "Stellt alle laufenden Bauaufträge im aktiven Dorf sofort fertig.",
+    icon: "🛠️",
+    price: 0.99,
+    type: "finish",
+  },
+};

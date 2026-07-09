@@ -881,6 +881,19 @@ function movementsHtml() {
       (m.type === "gatherReturn" ? returning : outgoing).push(item);
       continue;
     }
+    // Rohstofftransport zwischen eigenen Dörfern (trägt Rohstoffe statt Truppen)
+    if (m.type === "transport") {
+      const load = costHtml(m.res || {});
+      const what =
+        m.dir === "in"
+          ? `🛒 Rohstoffe von ${esc(m.target)} (${m.x}|${m.y})`
+          : `🛒 Rohstoffe nach ${esc(m.target)} (${m.x}|${m.y})`;
+      outgoing.push({
+        at: m.at,
+        html: `<div class="queue-item"><span>${what} — ${load}</span>${countdown(m.at)}</div>`,
+      });
+      continue;
+    }
     const units = Object.entries(m.units)
       .map(([k, n]) => `${n}× ${meta.UNITS[k].name}`)
       .join(", ");
@@ -1070,9 +1083,9 @@ renderers.militaer = () => {
       <tr class="unit-locked">
         <td class="unit-cell"><span class="unit-portrait">${UNIT_ICONS[key] || ""}</span></td>
         <td><b>${def.name}</b><br><small class="muted">Off ${def.off} · Def ${def.def} · Tempo ${def.speed} · trägt ${def.carry}</small></td>
-        <td class="num">${fmtNum(u.count)}</td>
-        <td><span class="cost">${costHtml(def.cost)}</span><br><small class="muted">Versorgung ${def.up}</small></td>
-        <td><div class="unit-lockmsg">🔒 ${esc(u.reqText || "gesperrt")}</div></td>
+        <td class="num" data-label="Im Dorf">${fmtNum(u.count)}</td>
+        <td data-label="Kosten"><span class="cost">${costHtml(def.cost)}</span><br><small class="muted">Versorgung ${def.up}</small></td>
+        <td data-label="Ausbilden"><div class="unit-lockmsg">🔒 ${esc(u.reqText || "gesperrt")}</div></td>
       </tr>`;
       }
       const cnt = trainCounts[key] ?? "";
@@ -1084,9 +1097,9 @@ renderers.militaer = () => {
       <tr>
         <td class="unit-cell"><span class="unit-portrait">${UNIT_ICONS[key] || ""}</span></td>
         <td><b>${def.name}</b><br><small class="muted">Off ${def.off} · Def ${def.def} · Tempo ${def.speed} · trägt ${def.carry}</small></td>
-        <td class="num">${fmtNum(u.count)}</td>
-        <td><div class="train-sum" id="train-sum-${key}">${trainSummaryHtml(key, cnt)}</div></td>
-        <td>
+        <td class="num" data-label="Im Dorf">${fmtNum(u.count)}</td>
+        <td data-label="Kosten"><div class="train-sum" id="train-sum-${key}">${trainSummaryHtml(key, cnt)}</div></td>
+        <td data-label="Ausbilden">
           <div class="train-presets">${presetBtns}</div>
           <div class="train-input">
             <input type="number" min="1" max="500" value="${cnt}" placeholder="Anzahl" id="train-${key}" style="width:80px" oninput="setTrainCount('${key}', this.value)">
@@ -1114,7 +1127,7 @@ renderers.militaer = () => {
       <div class="card"><h3 style="margin-top:0">Ausbildung</h3>${tq}</div>
     </div>
     <div class="card">
-      <table>
+      <table class="unit-table">
         <thead><tr><th></th><th>Einheit</th><th class="num">Im Dorf</th><th>Kosten</th><th>Ausbilden</th></tr></thead>
         <tbody>${unitRows}</tbody>
       </table>
@@ -1638,6 +1651,7 @@ function renderMarket(offers) {
   el.innerHTML = `
     <h2>Marktplatz</h2>
     ${state.village.buildings.markt.level < 1 ? '<div class="card"><p class="muted">⚠️ Baue zuerst einen <b>Marktplatz</b>, um eigene Angebote zu erstellen. Annehmen geht immer.</p></div>' : ""}
+    ${transportCardHtml()}
     <div class="card">
       <h3 style="margin-top:0">Sofort-Tausch</h3>
       <p class="muted">Tausch beim Basar — geht immer, aber zum Kurs <b>3:1</b> (du zahlst das Dreifache).</p>
@@ -1667,6 +1681,48 @@ function renderMarket(offers) {
   $("#wantRes").value = "stein";
   $("#exWantRes").value = "stein";
 }
+
+// Karte zum Verschicken von Rohstoffen an ein eigenes weiteres Dorf.
+// Nur sichtbar, wenn der Spieler mehr als ein Dorf besitzt.
+function transportCardHtml() {
+  const others = (state.villages || []).filter((v) => !v.active);
+  if (others.length < 1) return "";
+  const opts = others
+    .map((v) => `<option value="${v.id}">${esc(v.name)} (${v.x}|${v.y})</option>`)
+    .join("");
+  const canSend = state.village.buildings.markt.level >= 1;
+  return `
+    <div class="card">
+      <h3 style="margin-top:0">Rohstoffe an eigenes Dorf schicken</h3>
+      ${canSend ? '<p class="muted">Ein Handelskarren bringt die Rohstoffe zu einem deiner anderen Dörfer. Reisezeit hängt von der Entfernung ab.</p>' : '<p class="muted">⚠️ Baue zuerst einen <b>Marktplatz</b>, um Rohstoffe verschicken zu können.</p>'}
+      <div class="formrow">
+        <label>Zieldorf <select id="trTarget">${opts}</select></label>
+        <label>${RES_NAMES.holz} <input id="trHolz" type="number" min="0" value="0" style="width:80px"></label>
+        <label>${RES_NAMES.stein} <input id="trStein" type="number" min="0" value="0" style="width:80px"></label>
+        <label>${RES_NAMES.eisen} <input id="trEisen" type="number" min="0" value="0" style="width:80px"></label>
+        <button class="btn primary" onclick="transportRes()" ${canSend ? "" : "disabled"}>Senden</button>
+      </div>
+    </div>`;
+}
+
+window.transportRes = async () => {
+  try {
+    const r = await api("/api/transport", {
+      targetId: $("#trTarget").value,
+      res: {
+        holz: Number($("#trHolz").value) || 0,
+        stein: Number($("#trStein").value) || 0,
+        eisen: Number($("#trEisen").value) || 0,
+      },
+    });
+    const min = Math.max(0, Math.round((r.arrival - Date.now()) / 60000));
+    toast(`Karren unterwegs — Ankunft in ~${min} Min.`);
+    await refreshState();
+    renderMarket(await api("/api/market"));
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
 
 window.marketAction = async (what, id) => {
   try {
@@ -1733,32 +1789,6 @@ function renderOwnAlliance(a) {
     )
     .join("");
 
-  const isLeader = state.user.name === a.leader;
-  const reqs = a.requests || [];
-  const requestsCard =
-    isLeader && reqs.length
-      ? `
-    <div class="card">
-      <h3 style="margin-top:0">Beitrittsanfragen (${reqs.length})</h3>
-      <table>
-        <thead><tr><th>Spieler</th><th class="num">Punkte</th><th></th></tr></thead>
-        <tbody>${reqs
-          .map(
-            (r) => `
-          <tr>
-            <td><b>${esc(r.name)}</b></td>
-            <td class="num">${fmtNum(r.points)}</td>
-            <td>
-              <button class="btn small primary" onclick="allianceAction('accept','${r.id}')">Aufnehmen</button>
-              <button class="btn small danger" onclick="allianceAction('decline','${r.id}')">Ablehnen</button>
-            </td>
-          </tr>`,
-          )
-          .join("")}</tbody>
-      </table>
-    </div>`
-      : "";
-
   $("#tab-allianz").innerHTML = `
     <h2>[${esc(a.tag)}] ${esc(a.name)}</h2>
     <div class="card">
@@ -1768,8 +1798,7 @@ function renderOwnAlliance(a) {
         <tbody>${members}</tbody>
       </table>
       <div style="margin-top:14px"><button class="btn danger" onclick="allianceAction('leave')">Allianz verlassen</button></div>
-    </div>
-    ${requestsCard}`;
+    </div>`;
 }
 
 function renderAllianceLobby(list) {
@@ -1781,11 +1810,7 @@ function renderAllianceLobby(list) {
       <td><b>[${esc(a.tag)}]</b> ${esc(a.name)}</td>
       <td class="num">${a.memberCount}</td>
       <td class="num">${fmtNum(a.points)}</td>
-      <td>${
-        a.requested
-          ? `<button class="btn small" onclick="allianceAction('cancel','${a.id}')">Anfrage zurückziehen</button>`
-          : `<button class="btn small primary" onclick="allianceAction('join','${a.id}')">Beitritt anfragen</button>`
-      }</td>
+      <td><button class="btn small primary" onclick="allianceAction('join','${a.id}')">Beitreten</button></td>
     </tr>`,
         )
         .join("")
@@ -1817,10 +1842,6 @@ window.allianceAction = async (what, arg) => {
         name: $("#allyName").value,
       });
     else if (what === "join") await api("/api/alliance/join", { id: arg });
-    else if (what === "cancel") await api("/api/alliance/cancel", { id: arg });
-    else if (what === "accept") await api("/api/alliance/accept", { id: arg });
-    else if (what === "decline")
-      await api("/api/alliance/decline", { id: arg });
     else if (what === "leave") {
       await api("/api/alliance/leave", {});
       state.user.allianceTag = null;
@@ -2482,6 +2503,148 @@ renderers.rangliste = async () => {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+};
+
+// ---------------- Tab: Shop (Echtgeld / PayPal) ----------------
+
+// PayPal-SDK genau einmal laden (nur wenn echte Zahlung konfiguriert ist).
+let paypalSdkPromise = null;
+function loadPayPalSdk(clientId) {
+  if (paypalSdkPromise) return paypalSdkPromise;
+  paypalSdkPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src =
+      "https://www.paypal.com/sdk/js?client-id=" +
+      encodeURIComponent(clientId) +
+      "&currency=EUR&intent=capture";
+    s.onload = () => resolve(window.paypal);
+    s.onerror = () =>
+      reject(new Error("PayPal-SDK konnte nicht geladen werden."));
+    document.head.appendChild(s);
+  });
+  return paypalSdkPromise;
+}
+
+// Käufe schreibt der Server erst nach bestätigter Zahlung gut; wir übernehmen
+// den zurückgelieferten frischen State und zeichnen den Shop neu.
+function applyShopResult(r) {
+  if (r.state) applyState(r.state);
+  notify({
+    type: "report",
+    title: "Kauf erfolgreich",
+    body: `${esc(r.name || "Artikel")} wurde deinem Dorf gutgeschrieben.`,
+    ttl: 8000,
+  });
+  renderTab("shop");
+}
+
+renderers.shop = async () => {
+  const el = $("#tab-shop");
+  el.innerHTML = '<h2>💎 Shop</h2><p class="muted">Lade …</p>';
+  let shop;
+  try {
+    shop = await api("/api/shop");
+  } catch (e) {
+    el.innerHTML = `<p class="red">${esc(e.message)}</p>`;
+    return;
+  }
+
+  const boost =
+    shop.boosts && shop.boosts.production ? shop.boosts.production : null;
+  const boostBanner = boost
+    ? `<div class="card shop-boost">⚡ <b>Produktionsboost aktiv</b> (×${boost.mult}) — endet in ${countdown(boost.until, { tag: "b" })}</div>`
+    : "";
+
+  const testBadge = shop.testMode
+    ? `<div class="card shop-test">🧪 <b>Testmodus</b> — es ist keine PayPal-App hinterlegt. Käufe werden <b>ohne echte Zahlung</b> simuliert. Für echte Zahlungen <code>PAYPAL_CLIENT_ID</code> und <code>PAYPAL_SECRET</code> als Umgebungsvariablen setzen.</div>`
+    : `<p class="muted">Sichere Bezahlung über PayPal${shop.paypalEnv === "sandbox" ? " <b>(Sandbox)</b>" : ""}. Artikel werden dem <b>aktiven Dorf</b> gutgeschrieben.</p>`;
+
+  const cards = shop.items
+    .map(
+      (it) => `
+    <div class="card shop-item">
+      <div class="shop-icon">${it.icon || "💎"}</div>
+      <div class="shop-body">
+        <h3>${esc(it.name)}</h3>
+        <p class="muted">${esc(it.desc)}</p>
+      </div>
+      <div class="shop-buy">
+        <div class="shop-price">${it.price.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</div>
+        ${
+          shop.testMode
+            ? `<button class="btn primary" onclick="shopBuyTest('${it.id}')">Testkauf</button>`
+            : `<div class="pp-buttons" id="pp-${it.id}" data-item="${it.id}" data-price="${it.price}"></div>`
+        }
+      </div>
+    </div>`,
+    )
+    .join("");
+
+  const history = shop.purchases.length
+    ? `<div class="card">
+        <h3 style="margin-top:0">Deine Käufe</h3>
+        <table><tbody>${shop.purchases
+          .map(
+            (p) =>
+              `<tr><td>${fmtTime(p.at)}</td><td><b>${esc(p.name)}</b>${p.test ? ' <span class="muted">(Test)</span>' : ""}</td><td class="num">${Number(p.price).toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</td></tr>`,
+          )
+          .join("")}</tbody></table>
+      </div>`
+    : "";
+
+  el.innerHTML = `
+    <h2>💎 Shop <small class="muted">— Boosts &amp; Rohstoffe</small></h2>
+    ${testBadge}
+    ${boostBanner}
+    <div class="shop-grid">${cards}</div>
+    ${history}`;
+
+  // Im Live-Modus die PayPal-Buttons in jede Artikelkarte einhängen.
+  if (!shop.testMode && shop.paypalClientId) {
+    try {
+      const paypal = await loadPayPalSdk(shop.paypalClientId);
+      el.querySelectorAll(".pp-buttons").forEach((container) => {
+        const itemId = container.dataset.item;
+        paypal
+          .Buttons({
+            style: { layout: "horizontal", height: 38, tagline: false },
+            createOrder: async () => {
+              const o = await api("/api/shop/order", { itemId });
+              return o.orderId;
+            },
+            onApprove: async (data) => {
+              try {
+                const r = await api("/api/shop/capture", {
+                  orderId: data.orderID,
+                });
+                applyShopResult(r);
+              } catch (e) {
+                toast(e.message, true);
+              }
+            },
+            onError: () =>
+              toast("PayPal-Zahlung fehlgeschlagen.", true),
+          })
+          .render(container);
+      });
+    } catch (e) {
+      el.insertAdjacentHTML(
+        "beforeend",
+        `<p class="red">${esc(e.message)}</p>`,
+      );
+    }
+  }
+};
+
+// Testmodus: Bestellung anlegen und sofort „einziehen" (ohne echte Zahlung).
+window.shopBuyTest = async (itemId) => {
+  try {
+    const o = await api("/api/shop/order", { itemId });
+    const r = await api("/api/shop/capture", { orderId: o.orderId });
+    applyShopResult(r);
+  } catch (e) {
+    toast(e.message, true);
+  }
 };
 
 // ---------------- Tab: Profil ----------------

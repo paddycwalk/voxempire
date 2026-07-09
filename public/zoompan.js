@@ -38,11 +38,11 @@
     // Transform anwenden + Verschiebung so begrenzen, dass der Inhalt den Container füllt.
     function apply() {
       const w = container.clientWidth || 1;
-      const h = container.clientHeight ||| onWorldPan | 1;
+      const h = container.clientHeight || 1;
       st.tx = clamp(st.tx, w * (1 - st.s), 0);
       st.ty = clamp(st.ty, h * (1 - st.s), 0);
       svg.style.transform = `translate(${st.tx}px, ${st.ty}px) scale(${st.s})`;
-      container.style.cursor = st.s > 1 ? "grab" : "";
+      container.style.cursor = st.s > 1 || onWorldPan ? "grab" : "";
     }
 
     // Zoomen um einen festen Punkt (fx, fy) in Container-Koordinaten.

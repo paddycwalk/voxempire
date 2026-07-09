@@ -911,13 +911,22 @@ function plot(key, state, meta, selected) {
     </g>`
     : "";
 
-  return `
+  // Gebäude selbst (tiefensortiert). Die Marker (Stufen-Badge, Baustelle,
+  // Ausbau-Symbol) werden separat in einer eigenen Ebene über allen Gebäuden
+  // gerendert, damit sie nie hinter davorstehenden Gebäuden verschwinden.
+  const body = `
     <g class="vs-plot${selected === key ? " vs-selected" : ""}" transform="translate(${cx.toFixed(1)},${cy.toFixed(1)})" onclick="selectBuilding('${key}')">
       <title>${def.name} — ${ghost ? "noch nicht gebaut" : "Stufe " + b.level}</title>
       ${shadow}${selRing}
       <g class="vs-art${ghost ? " vs-ghost" : ""}" transform="scale(${grow.toFixed(3)})">${art}</g>
+    </g>`;
+
+  const markers = `
+    <g class="vs-plot-markers" transform="translate(${cx.toFixed(1)},${cy.toFixed(1)})" onclick="selectBuilding('${key}')">
       ${badge}${construct}${upgrade}
     </g>`;
+
+  return { depth: c + r + 0.5, body, markers };
 }
 
 // Umgebungs-Deko als tiefen-sortierbares Objekt
@@ -941,9 +950,11 @@ function renderVillageScene(state, meta, selected) {
   const mauerLvl = state.village.buildings.mauer.level;
 
   const objs = [];
+  const markers = [];
   Object.keys(GRID).forEach((key) => {
-    const [c, r] = GRID[key];
-    objs.push({ depth: c + r + 0.5, svg: plot(key, state, meta, selected) });
+    const p = plot(key, state, meta, selected);
+    objs.push({ depth: p.depth, svg: p.body });
+    markers.push(p.markers);
   });
   for (let r = LO; r <= HI; r++) {
     for (let c = LO; c <= HI; c++) {
@@ -954,6 +965,7 @@ function renderVillageScene(state, meta, selected) {
   }
   objs.sort((a, b) => a.depth - b.depth);
   const objSvg = objs.map((o) => o.svg).join("");
+  const markerSvg = markers.join("");
 
   return `
   <svg id="villageScene" viewBox="0 0 ${VBW} ${VBH}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Dorfansicht (isometrisch)">
@@ -990,5 +1002,6 @@ function renderVillageScene(state, meta, selected) {
     ${walls(mauerLvl, false)}
     ${objSvg}
     ${walls(mauerLvl, true)}
+    <g class="vs-markers">${markerSvg}</g>
   </svg>`;
 }

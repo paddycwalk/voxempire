@@ -541,6 +541,53 @@ th.num {
   color: var(--red);
 }
 
+/* Militär-Tabelle auf schmalen Bildschirmen: Zeilen als gestapelte Karten,
+   damit die "Ausbilden"-Spalte nicht rechts aus dem Bild läuft. */
+@media (max-width: 640px) {
+  .unit-table thead {
+    display: none;
+  }
+  .unit-table,
+  .unit-table tbody,
+  .unit-table tr,
+  .unit-table td {
+    display: block;
+    width: 100%;
+  }
+  .unit-table tr {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel2);
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+  .unit-table td {
+    border-bottom: none;
+    padding: 5px 0;
+  }
+  /* Portrait linksbündig, kompakt über der Einheit */
+  .unit-table td.unit-cell {
+    width: auto;
+    padding: 0 0 4px;
+  }
+  .unit-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 3px;
+  }
+  /* Zahl "Im Dorf" wieder linksbündig, damit das Label passt */
+  .unit-table td.num {
+    text-align: left;
+  }
+  .unit-table .train-input input {
+    flex: 1 1 auto;
+    width: auto !important;
+  }
+}
+
 .queue-item {
   display: flex;
   justify-content: space-between;
@@ -2000,4 +2047,65 @@ tr.unit-locked {
 .coord-link:hover {
   filter: brightness(1.2);
   border-bottom-style: solid;
+}
+
+/* ---------- Item-Shop (Echtgeld / PayPal) ---------- */
+.shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.shop-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.shop-icon {
+  font-size: 34px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.shop-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.shop-body h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+.shop-body p {
+  margin: 0;
+  font-size: 13px;
+}
+.shop-buy {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 120px;
+}
+.shop-price {
+  font-weight: 700;
+  color: var(--gold);
+  font-size: 16px;
+  white-space: nowrap;
+}
+.pp-buttons {
+  width: 150px;
+  max-width: 100%;
+}
+.shop-test {
+  border-color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 10%, var(--panel));
+}
+.shop-test code {
+  background: var(--panel2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.shop-boost {
+  border-color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, var(--panel));
 }

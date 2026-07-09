@@ -32,6 +32,7 @@ import {
   popCap,
   trainTimeMs,
   travelTimeMs,
+  transportTimeMs,
   villagePoints,
   residentsCap,
   gatherTravelMs,
@@ -44,7 +45,16 @@ import {
   QUESTS,
   xpToNext,
   levelForXp,
+  SHOP_ITEMS,
+  SHOP_CURRENCY,
 } from "./gamedata.js";
+import {
+  paypalConfigured,
+  paypalClientId,
+  paypalEnv,
+  createOrder as ppCreateOrder,
+  captureOrder as ppCaptureOrder,
+} from "./paypal.js";
 
 export class GameError extends Error {}
 const fail = (msg) => {
@@ -240,6 +250,7 @@ function ensureVillageFields(v) {
   if (v.residentsLost == null) v.residentsLost = 0;
   if (v.residentsRegenAt == null) v.residentsRegenAt = Date.now();
   if (v.garrison == null) v.garrison = {};
+  if (v.boosts == null) v.boosts = {};
 }
 
 // Gefallene Bewohner im Rathaus nachziehen: je residentRegenMs() ein Bewohner.
@@ -280,10 +291,32 @@ function killResidents(v, n) {
 
 function produceSpan(v, from, to) {
   if (to <= from) return;
+  // Ein Echtgeld-Produktionsboost (Item-Shop) kann mitten im Segment auslaufen –
+  // dann den Zeitraum am Ablaufzeitpunkt aufteilen, damit exakt abgerechnet wird.
+  const b = v.boosts?.production;
+  if (b && b.until > from && b.until < to) {
+    produceSpanMult(v, from, b.until, b.mult || 1);
+    produceSpanMult(v, b.until, to, 1);
+    return;
+  }
+  produceSpanMult(v, from, to, productionMultiplier(v, from));
+}
+
+// Aktiver Produktions-Multiplikator zum Zeitpunkt `at` (1 = kein Boost).
+function productionMultiplier(v, at = Date.now()) {
+  const b = v.boosts?.production;
+  return b && b.until > at ? b.mult || 1 : 1;
+}
+
+function produceSpanMult(v, from, to, mult) {
+  if (to <= from) return;
   const hours = (to - from) / 3_600_000;
   const cap = storageCap(v.buildings.lager);
   for (const r of RES) {
-    v.res[r] = Math.min(cap, v.res[r] + prodPerHour(v.buildings[r]) * hours);
+    v.res[r] = Math.min(
+      cap,
+      v.res[r] + prodPerHour(v.buildings[r]) * hours * mult,
+    );
   }
 }
 
@@ -673,6 +706,48 @@ export function recallReinforcement(user, targetId, fromId) {
   return { arrival: at };
 }
 
+// Rohstoffe per Handelskarren an ein eigenes weiteres Dorf schicken.
+// Einbahn-Transport (Event-Typ `transport`): die Ladung wird beim Zieldorf
+// unter Beachtung des Lagerlimits gutgeschrieben.
+export function sendResources(user, targetId, resCounts) {
+  const v = db.villages[user.villageId];
+  touchVillage(v);
+  if (v.buildings.markt < 1) fail("Du brauchst zuerst einen Marktplatz.");
+  const target = db.villages[targetId] || fail("Zieldorf existiert nicht.");
+  if (target.id === v.id) fail("Ziel- und Herkunftsdorf sind identisch.");
+  if (target.owner !== user.name.toLowerCase())
+    fail("Rohstoffe kannst du nur an deine eigenen Dörfer schicken.");
+  touchVillage(target);
+
+  const load = {};
+  let total = 0;
+  for (const r of RES) {
+    const n = Math.max(0, Math.floor(Number(resCounts?.[r] || 0)));
+    if (n > Math.floor(v.res[r])) fail(`Nicht genügend ${RES_NAMES[r]}.`);
+    if (n > 0) {
+      load[r] = n;
+      total += n;
+    }
+  }
+  if (total === 0) fail("Wähle mindestens einen Rohstoff.");
+  for (const r of Object.keys(load)) v.res[r] -= load[r];
+
+  const dist = Math.hypot(v.x - target.x, v.y - target.y);
+  const start = Date.now();
+  const at = start + transportTimeMs(dist);
+  db.events.push({
+    id: nextId("e"),
+    type: "transport",
+    at,
+    start,
+    from: v.id,
+    to: target.id,
+    owner: user.name.toLowerCase(),
+    res: load,
+  });
+  return { arrival: at };
+}
+
 // Vom Sekunden-Tick aufgerufen: fällige Events abarbeiten (auch Nachholbedarf nach Neustart)
 export function processEvents(now = Date.now()) {
   const due = db.events.filter((e) => e.at <= now).sort((a, b) => a.at - b.at);
@@ -685,6 +760,7 @@ export function processEvents(now = Date.now()) {
     else if (ev.type === "reinforce") resolveReinforce(ev, now);
     else if (ev.type === "gather") resolveGather(ev, now);
     else if (ev.type === "gatherReturn") resolveGatherReturn(ev, now);
+    else if (ev.type === "transport") resolveTransport(ev, now);
   }
 }
 
@@ -1024,6 +1100,38 @@ function resolveReinforce(ev, now) {
       x: to.x,
       y: to.y,
       units: ev.units,
+    });
+  }
+}
+
+// Rohstoff-Transport erreicht das Zieldorf: Ladung unter Beachtung des
+// Lagerlimits gutschreiben und den Absender per Bericht informieren.
+function resolveTransport(ev, now) {
+  const to = db.villages[ev.to];
+  if (!to) return; // Ziel verschwunden (z. B. erobert) — Ladung verfällt
+  touchVillage(to, now);
+  const cap = storageCap(to.buildings.lager);
+  const delivered = {};
+  for (const r of RES) {
+    const amt = ev.res?.[r] || 0;
+    if (!amt) continue;
+    const before = to.res[r];
+    to.res[r] = Math.min(cap, to.res[r] + amt);
+    delivered[r] = to.res[r] - before;
+  }
+  const sender = db.users[ev.owner];
+  if (sender) {
+    const from = db.villages[ev.from];
+    addReport(sender, {
+      time: now,
+      kind: "Transport",
+      title: `🛒 Rohstoffe erreichten ${to.name}`,
+      target: to.name,
+      x: to.x,
+      y: to.y,
+      from: from ? from.name : "?",
+      res: delivered,
+      stock: resSnapshot(to),
     });
   }
 }
@@ -1961,6 +2069,7 @@ export function getState(user) {
           e.type === "reinforce") &&
           e.from === v.id) ||
         (e.type === "return" && e.to === v.id) ||
+        (e.type === "transport" && (e.from === v.id || e.to === v.id)) ||
         ((e.type === "gather" || e.type === "gatherReturn") &&
           e.village === v.id),
     )
@@ -1988,6 +2097,25 @@ export function getState(user) {
           fromY: outbound ? v.y : e.y,
           toX: outbound ? e.x : v.x,
           toY: outbound ? e.y : v.y,
+        };
+      }
+      // Rohstofftransport: Einbahn zwischen zwei eigenen Dörfern.
+      if (e.type === "transport") {
+        const outbound = e.from === v.id;
+        const other = db.villages[outbound ? e.to : e.from];
+        return {
+          type: "transport",
+          at: e.at,
+          start: e.start || null,
+          res: e.res,
+          dir: outbound ? "out" : "in",
+          target: other ? other.name : "?",
+          x: other?.x,
+          y: other?.y,
+          fromX: outbound ? v.x : other?.x,
+          fromY: outbound ? v.y : other?.y,
+          toX: outbound ? other?.x : v.x,
+          toY: outbound ? other?.y : v.y,
         };
       }
       const other = db.villages[e.type === "return" ? e.from : e.to];
@@ -2029,7 +2157,10 @@ export function getState(user) {
       y: v.y,
       res: Object.fromEntries(RES.map((r) => [r, Math.floor(v.res[r])])),
       rates: Object.fromEntries(
-        RES.map((r) => [r, prodPerHour(v.buildings[r])]),
+        RES.map((r) => [
+          r,
+          Math.round(prodPerHour(v.buildings[r]) * productionMultiplier(v, now)),
+        ]),
       ),
       storage: storageCap(v.buildings.lager),
       pop: popUsed(v),
@@ -2089,6 +2220,7 @@ export function getState(user) {
       trainQueue: v.trainQueue,
       protectedUntil: v.protectedUntil,
       points: villagePoints(v),
+      boosts: activeBoosts(v, now),
     },
     villages: ownedVillages(user)
       .map((vv) => {
@@ -2161,4 +2293,177 @@ export function changePassword(user, oldPass, newPass) {
   for (const [tok, t] of Object.entries(db.tokens)) {
     if (t.user === user.name.toLowerCase()) delete db.tokens[tok];
   }
+}
+
+// ---------------- Item-Shop (Echtgeld / PayPal) ----------------
+// Ablauf: Client legt via /api/shop/order eine Bestellung an (PayPal-Order),
+// der Käufer bestätigt im PayPal-Fenster, danach zieht /api/shop/capture die
+// Zahlung ein. Erst nach bestätigter Zahlung schreibt grantShopItem den
+// Artikel autoritativ gut. Ohne PayPal-Zugangsdaten läuft alles im Testmodus
+// (Käufe werden ohne echte Zahlung simuliert — analog zum Training in VOXSHOT).
+
+// Aktive, noch laufende Boosts eines Dorfes (für getState/Shop-Anzeige).
+function activeBoosts(v, now = Date.now()) {
+  ensureVillageFields(v);
+  const out = {};
+  const p = v.boosts?.production;
+  if (p && p.until > now) out.production = { mult: p.mult, until: p.until };
+  return out;
+}
+
+// Öffentliche Artikelliste (ohne interne Effekt-Details).
+function publicShopItems() {
+  return Object.entries(SHOP_ITEMS).map(([id, it]) => ({
+    id,
+    name: it.name,
+    desc: it.desc,
+    icon: it.icon,
+    price: it.price,
+    currency: SHOP_CURRENCY,
+  }));
+}
+
+export function getShop(user) {
+  const v = db.villages[user.villageId];
+  touchVillage(v);
+  const purchases = (user.purchases || [])
+    .slice(-15)
+    .reverse()
+    .map((p) => ({ ...p }));
+  return {
+    items: publicShopItems(),
+    currency: SHOP_CURRENCY,
+    testMode: !paypalConfigured,
+    paypalClientId: paypalConfigured ? paypalClientId() : null,
+    paypalEnv: paypalEnv(),
+    boosts: activeBoosts(v),
+    purchases,
+  };
+}
+
+// Bestellung anlegen. Liefert { orderId, testMode } — der Client bezahlt
+// anschließend über die PayPal-Buttons bzw. direkt (Testmodus).
+export async function shopCreateOrder(user, itemId) {
+  const item = SHOP_ITEMS[itemId] || fail("Unbekannter Shop-Artikel.");
+  const testMode = !paypalConfigured;
+  let orderId;
+  if (testMode) {
+    orderId = "TEST-" + nextId("o");
+  } else {
+    const order = await ppCreateOrder({
+      value: item.price,
+      currency: SHOP_CURRENCY,
+      description: `VOXEMPIRE — ${item.name}`,
+      reference: `${user.name.toLowerCase()}:${itemId}`,
+    });
+    orderId = order?.id;
+    if (!orderId) fail("PayPal-Bestellung konnte nicht erstellt werden.");
+  }
+  db.shopOrders[orderId] = {
+    orderId,
+    user: user.name.toLowerCase(),
+    item: itemId,
+    price: item.price,
+    currency: SHOP_CURRENCY,
+    status: "CREATED",
+    test: testMode,
+    created: Date.now(),
+  };
+  return { orderId, testMode };
+}
+
+// Zahlung einziehen und Artikel gutschreiben (idempotent gegen Doppel-Einlösung).
+export async function shopCaptureOrder(user, orderId) {
+  const rec = db.shopOrders[String(orderId || "")];
+  if (!rec) fail("Unbekannte Bestellung.");
+  if (rec.user !== user.name.toLowerCase())
+    fail("Diese Bestellung gehört nicht zu deinem Konto.");
+  const item = SHOP_ITEMS[rec.item] || fail("Unbekannter Shop-Artikel.");
+
+  // Schon eingelöst → nichts doppelt gutschreiben.
+  if (rec.status === "GRANTED") {
+    return {
+      alreadyGranted: true,
+      item: rec.item,
+      name: item.name,
+      state: getState(user),
+    };
+  }
+
+  if (rec.test) {
+    rec.capture = { status: "COMPLETED", test: true };
+  } else {
+    const cap = await ppCaptureOrder(orderId);
+    if (cap?.status !== "COMPLETED") fail("Zahlung wurde nicht abgeschlossen.");
+    // Gezahlten Betrag serverseitig gegen den Artikelpreis prüfen.
+    const paid = cap?.purchase_units?.[0]?.payments?.captures?.[0]?.amount;
+    if (
+      !paid ||
+      paid.currency_code !== SHOP_CURRENCY ||
+      Number(paid.value) + 1e-6 < item.price
+    )
+      fail("Der gezahlte Betrag stimmt nicht mit dem Artikelpreis überein.");
+    rec.capture = {
+      status: cap.status,
+      captureId: cap?.purchase_units?.[0]?.payments?.captures?.[0]?.id || null,
+    };
+  }
+
+  const effect = grantShopItem(user, rec.item);
+  rec.status = "GRANTED";
+  rec.grantedAt = Date.now();
+
+  user.purchases = user.purchases || [];
+  user.purchases.push({
+    id: orderId,
+    item: rec.item,
+    name: item.name,
+    price: item.price,
+    currency: SHOP_CURRENCY,
+    at: rec.grantedAt,
+    test: rec.test,
+  });
+  if (user.purchases.length > 100)
+    user.purchases = user.purchases.slice(-100);
+
+  return {
+    granted: true,
+    item: rec.item,
+    name: item.name,
+    effect,
+    state: getState(user),
+  };
+}
+
+// Artikel im aktiven Dorf gutschreiben (nur nach bestätigter Zahlung aufrufen).
+function grantShopItem(user, itemId) {
+  const item = SHOP_ITEMS[itemId] || fail("Unbekannter Shop-Artikel.");
+  const v = db.villages[user.villageId];
+  touchVillage(v);
+  ensureVillageFields(v);
+
+  if (item.type === "resources") {
+    const cap = storageCap(v.buildings.lager);
+    for (const r of RES)
+      v.res[r] = Math.min(cap, v.res[r] + (item.amount[r] || 0));
+    return { resources: item.amount };
+  }
+
+  if (item.type === "boost") {
+    const now = Date.now();
+    const cur = v.boosts.production;
+    // Läuft schon ein Boost, verlängert der Kauf ab dessen Ablauf.
+    const base = cur && cur.until > now ? cur.until : now;
+    v.boosts.production = { mult: item.mult, until: base + item.durationMs };
+    return { boostUntil: v.boosts.production.until, mult: item.mult };
+  }
+
+  if (item.type === "finish") {
+    const now = Date.now();
+    for (const q of v.queue) q.done = now;
+    touchVillage(v, now);
+    return { finished: true };
+  }
+
+  fail("Unbekannter Artikel-Typ.");
 }
