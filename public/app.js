@@ -2711,6 +2711,7 @@ renderers.berichte = async () => {
         <div class="rbody hidden">
           ${r.from ? `<p class="muted">Von: ${esc(r.from)}</p>` : ""}
           ${r.res ? `<div class="rloot"><b>📦 Rohstoffe</b> ${costHtml(r.res)}</div>` : ""}
+          ${r.returned ? `<div class="rloot"><b>↩️ Lager voll — zurückgeschickt</b> ${costHtml(r.returned)}</div>` : ""}
           ${r.stock ? `<div class="rloot"><b>📦 Lager jetzt</b> ${costHtml(r.stock)}</div>` : ""}
           ${r.x != null ? `<p class="muted small">Ziel: (${r.x}|${r.y})</p>` : ""}
         </div>
@@ -3066,6 +3067,17 @@ window.shopBuyTest = async (itemId) => {
 // ---------------- Tab: Changelog ----------------
 // Neue Einträge oben ergänzen. Typen: "feature", "fix", "balance", "improvement".
 const CHANGELOG = [
+  {
+    version: "0.5.1",
+    date: "2026-07-09",
+    title: "Transport-Rücklieferung",
+    changes: [
+      {
+        type: "fix",
+        text: "Passt eine Rohstofflieferung nicht mehr ins volle Lager des Zieldorfs, wird der Überschuss automatisch zurückgeliefert statt zu verfallen.",
+      },
+    ],
+  },
   {
     version: "0.5.0",
     date: "2026-07-09",

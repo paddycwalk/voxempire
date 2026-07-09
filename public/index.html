@@ -1,121 +1,121 @@
 <!DOCTYPE html>
 <html lang="de">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-        <meta name="theme-color" content="#12151c">
-        <meta name="mobile-web-app-capable" content="yes">
-        <meta name="apple-mobile-web-app-capable" content="yes">
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-        <meta name="apple-mobile-web-app-title" content="VOXEMPIRE">
-        <title>VOXEMPIRE — Aufbau-Strategie im Browser</title>
-        <link rel="icon" type="image/svg+xml" href="logo.svg">
-        <link rel="apple-touch-icon" href="logo.svg">
-        <link rel="stylesheet" href="style.css">
-    </head>
-    <body>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#12151c">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="VOXEMPIRE">
+    <title>VOXEMPIRE — Aufbau-Strategie im Browser</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg">
+    <link rel="apple-touch-icon" href="logo.svg">
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
 
-        <!-- ===== Login / Registrierung ===== -->
-        <div id="authScreen" class="auth-screen">
-            <div class="auth-box">
-                <img class="auth-logo" src="logo.svg" alt="VOXEMPIRE Wappen" width="96" height="96">
-                <h1>VOX<span>EMPIRE</span></h1>
-                <p class="tagline">Baue dein Dorf. Handle. Schmiede Allianzen. Führe Krieg.<br>
+    <!-- ===== Login / Registrierung ===== -->
+    <div id="authScreen" class="auth-screen">
+      <div class="auth-box">
+        <img class="auth-logo" src="logo.svg" alt="VOXEMPIRE Wappen" width="96" height="96">
+        <h1>VOX<span>EMPIRE</span></h1>
+        <p class="tagline">Baue dein Dorf. Handle. Schmiede Allianzen. Führe Krieg.<br>
         Deine Welt läuft weiter — auch wenn du offline bist.</p>
-                <div class="auth-form">
-                    <input id="authName" type="text" placeholder="Spielername" maxlength="16" autocomplete="username">
-                    <input id="authPass" type="password" placeholder="Passwort" autocomplete="current-password">
-                    <div class="auth-buttons">
-                        <button id="btnLogin" class="btn primary">Einloggen</button>
-                        <button id="btnRegister" class="btn">Registrieren</button>
-                    </div>
-                    <div id="authError" class="error"></div>
-                </div>
-            </div>
+        <div class="auth-form">
+          <input id="authName" type="text" placeholder="Spielername" maxlength="16" autocomplete="username">
+          <input id="authPass" type="password" placeholder="Passwort" autocomplete="current-password">
+          <div class="auth-buttons">
+            <button id="btnLogin" class="btn primary">Einloggen</button>
+            <button id="btnRegister" class="btn">Registrieren</button>
+          </div>
+          <div id="authError" class="error"></div>
         </div>
+      </div>
+    </div>
 
-        <!-- ===== Spiel ===== -->
-        <div id="gameScreen" class="game hidden">
-            <header class="topbar">
-                <div class="logo"><img src="logo.svg" alt="" width="26" height="26">VOX<span>EMPIRE</span></div>
-                <select id="villageSelect" class="village-select hidden" title="Dorf wechseln"></select>
-                <div class="resbar">
-                    <div class="res" data-tip="Holz (aktuell/Lagerkapazität)">
-                        <i>🪵</i>
-                        <b id="resHolz">0</b>
-                        <small id="rateHolz"></small>
-                    </div>
-                    <div class="res" data-tip="Stein (aktuell/Lagerkapazität)">
-                        <i>🪨</i>
-                        <b id="resStein">0</b>
-                        <small id="rateStein"></small>
-                    </div>
-                    <div class="res" data-tip="Eisen (aktuell/Lagerkapazität)">
-                        <i>⛓️</i>
-                        <b id="resEisen">0</b>
-                        <small id="rateEisen"></small>
-                    </div>
-                    <div class="res" data-tip="Versorgung (Truppen)">
-                        <i>👥</i>
-                        <b id="resPop">0/0</b>
-                    </div>
-                    <div class="res" data-tip="Bewohner (frei/gesamt)">
-                        <i>👷</i>
-                        <b id="resResidents">0/0</b>
-                    </div>
-                </div>
-                <div class="userbox">
-                    <span id="levelChip" class="level-chip hidden" data-tip="Spielerstufe">Lv 1</span>
-                    <span id="userName"></span>
-                    <button id="btnLogout" class="btn small">Abmelden</button>
-                </div>
-            </header>
-
-            <div id="protectionBanner" class="banner hidden"></div>
-            <div id="incomingBanner" class="banner danger hidden"></div>
-
-            <nav class="tabs">
-                <button class="tab active" data-tab="dorf">🏰 Dorf</button>
-                <button class="tab" data-tab="karte">🗺️ Karte</button>
-                <button class="tab" data-tab="militaer">⚔️ Militär</button>
-                <button class="tab" data-tab="auftraege">� Aufträge <b id="questBadge" class="badge hidden"></b>
-                </button>
-                <button class="tab" data-tab="markt">⚖️ Markt <b id="marketBadge" class="badge hidden"></b>
-                </button>
-                <button class="tab" data-tab="allianz">🛡️ Allianz</button>
-                <button class="tab" data-tab="chat">💬 Chat <b id="chatBadge" class="badge hidden"></b>
-                </button>
-                <button class="tab" data-tab="freunde">🤝 Freunde <b id="friendBadge" class="badge hidden"></b>
-                </button>
-                <button class="tab" data-tab="berichte">📜 Berichte <b id="reportBadge" class="badge hidden"></b>
-                </button>
-                <button class="tab" data-tab="rangliste">🏆 Rangliste</button>
-                <button class="tab" data-tab="shop">💎 Shop</button>
-                <button class="tab" data-tab="profil">⚙️ Profil</button>
-                <button class="tab" data-tab="changelog">🆕 Changelog</button>
-            </nav>
-
-            <main id="content">
-                <section id="tab-dorf" class="panel"></section>
-                <section id="tab-karte" class="panel hidden"></section>
-                <section id="tab-militaer" class="panel hidden"></section>
-                <section id="tab-auftraege" class="panel hidden"></section>
-                <section id="tab-markt" class="panel hidden"></section>
-                <section id="tab-allianz" class="panel hidden"></section>
-                <section id="tab-chat" class="panel hidden"></section>
-                <section id="tab-freunde" class="panel hidden"></section>
-                <section id="tab-berichte" class="panel hidden"></section>
-                <section id="tab-rangliste" class="panel hidden"></section>
-                <section id="tab-shop" class="panel hidden"></section>
-                <section id="tab-profil" class="panel hidden"></section>
-                <section id="tab-changelog" class="panel hidden"></section>
-            </main>
-
-            <div id="notifyStack" class="notify-stack"></div>
+    <!-- ===== Spiel ===== -->
+    <div id="gameScreen" class="game hidden">
+      <header class="topbar">
+        <div class="logo"><img src="logo.svg" alt="" width="26" height="26">VOX<span>EMPIRE</span></div>
+        <select id="villageSelect" class="village-select hidden" title="Dorf wechseln"></select>
+        <div class="resbar">
+          <div class="res" data-tip="Holz (aktuell/Lagerkapazität)">
+            <i>🪵</i>
+            <b id="resHolz">0</b>
+            <small id="rateHolz"></small>
+          </div>
+          <div class="res" data-tip="Stein (aktuell/Lagerkapazität)">
+            <i>🪨</i>
+            <b id="resStein">0</b>
+            <small id="rateStein"></small>
+          </div>
+          <div class="res" data-tip="Eisen (aktuell/Lagerkapazität)">
+            <i>⛓️</i>
+            <b id="resEisen">0</b>
+            <small id="rateEisen"></small>
+          </div>
+          <div class="res" data-tip="Versorgung (Truppen)">
+            <i>👥</i>
+            <b id="resPop">0/0</b>
+          </div>
+          <div class="res" data-tip="Bewohner (frei/gesamt)">
+            <i>👷</i>
+            <b id="resResidents">0/0</b>
+          </div>
         </div>
-        <script src="worldmap.js"></script>
-        <script src="village.js"></script>
-        <script src="zoompan.js"></script>
-        <script src="app.js"></script>
-    </body>
+        <div class="userbox">
+          <span id="levelChip" class="level-chip hidden" data-tip="Spielerstufe">Lv 1</span>
+          <span id="userName"></span>
+          <button id="btnLogout" class="btn small">Abmelden</button>
+        </div>
+      </header>
+
+      <div id="protectionBanner" class="banner hidden"></div>
+      <div id="incomingBanner" class="banner danger hidden"></div>
+
+      <nav class="tabs">
+        <button class="tab active" data-tab="dorf">🏰 Dorf</button>
+        <button class="tab" data-tab="karte">🗺️ Karte</button>
+        <button class="tab" data-tab="militaer">⚔️ Militär</button>
+        <button class="tab" data-tab="auftraege">� Aufträge <b id="questBadge" class="badge hidden"></b>
+        </button>
+        <button class="tab" data-tab="markt">⚖️ Markt <b id="marketBadge" class="badge hidden"></b>
+        </button>
+        <button class="tab" data-tab="allianz">🛡️ Allianz</button>
+        <button class="tab" data-tab="chat">💬 Chat <b id="chatBadge" class="badge hidden"></b>
+        </button>
+        <button class="tab" data-tab="freunde">🤝 Freunde <b id="friendBadge" class="badge hidden"></b>
+        </button>
+        <button class="tab" data-tab="berichte">📜 Berichte <b id="reportBadge" class="badge hidden"></b>
+        </button>
+        <button class="tab" data-tab="rangliste">🏆 Rangliste</button>
+        <button class="tab" data-tab="shop">💎 Shop</button>
+        <button class="tab" data-tab="profil">⚙️ Profil</button>
+        <button class="tab" data-tab="changelog">🆕 Changelog</button>
+      </nav>
+
+      <main id="content">
+        <section id="tab-dorf" class="panel"></section>
+        <section id="tab-karte" class="panel hidden"></section>
+        <section id="tab-militaer" class="panel hidden"></section>
+        <section id="tab-auftraege" class="panel hidden"></section>
+        <section id="tab-markt" class="panel hidden"></section>
+        <section id="tab-allianz" class="panel hidden"></section>
+        <section id="tab-chat" class="panel hidden"></section>
+        <section id="tab-freunde" class="panel hidden"></section>
+        <section id="tab-berichte" class="panel hidden"></section>
+        <section id="tab-rangliste" class="panel hidden"></section>
+        <section id="tab-shop" class="panel hidden"></section>
+        <section id="tab-profil" class="panel hidden"></section>
+        <section id="tab-changelog" class="panel hidden"></section>
+      </main>
+
+      <div id="notifyStack" class="notify-stack"></div>
+    </div>
+    <script src="worldmap.js"></script>
+    <script src="village.js"></script>
+    <script src="zoompan.js"></script>
+    <script src="app.js"></script>
+  </body>
 </html>

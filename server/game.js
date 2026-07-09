@@ -1290,25 +1290,57 @@ function resolveTransport(ev, now) {
   touchVillage(to, now);
   const cap = storageCap(to.buildings.lager);
   const delivered = {};
+  const overflow = {};
+  let overflowTotal = 0;
   for (const r of RES) {
     const amt = ev.res?.[r] || 0;
     if (!amt) continue;
     const before = to.res[r];
     to.res[r] = Math.min(cap, to.res[r] + amt);
     delivered[r] = to.res[r] - before;
+    // Was nicht ins Lager passte, wandert zurück zum Herkunftsdorf.
+    const rest = amt - delivered[r];
+    if (rest > 0) {
+      overflow[r] = rest;
+      overflowTotal += rest;
+    }
   }
+
+  // Überschuss zurückliefern, sofern das Herkunftsdorf noch existiert (und nicht
+  // inzwischen dem Zieldorf gehört – sonst wäre es eine Nullfahrt). Eine bereits
+  // zurückgeschickte Ladung wird nicht erneut gebounct (kein Endlos-Pendeln).
+  const from = db.villages[ev.from];
+  let returned = null;
+  if (overflowTotal > 0 && !ev.bounced && from && from.id !== to.id) {
+    returned = overflow;
+    const backDist = Math.hypot(to.x - from.x, to.y - from.y);
+    db.events.push({
+      id: nextId("e"),
+      type: "transport",
+      at: now + transportTimeMs(backDist),
+      start: now,
+      from: to.id,
+      to: from.id,
+      owner: ev.owner,
+      res: overflow,
+      bounced: true, // Rücklieferung wegen vollem Lager
+    });
+  }
+
   const sender = db.users[ev.owner];
   if (sender) {
-    const from = db.villages[ev.from];
     addReport(sender, {
       time: now,
       kind: "Transport",
-      title: `🛒 Rohstoffe erreichten ${to.name}`,
+      title: ev.bounced
+        ? `↩️ Überschuss kam zurück nach ${to.name}`
+        : `🛒 Rohstoffe erreichten ${to.name}`,
       target: to.name,
       x: to.x,
       y: to.y,
       from: from ? from.name : "?",
       res: delivered,
+      returned, // zurückgeschickter Überschuss (oder null)
       stock: resSnapshot(to),
       villageId: ev.from,
     });
