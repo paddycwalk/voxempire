@@ -259,6 +259,11 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
   const N = 2 * R + 1;
   const inner = N * CELL;
   const W = inner + 2 * M;
+  // Zusätzlich gerenderter Rand rund um das sichtbare Fenster, damit man die
+  // Karte per Ziehen verschieben kann und dabei benachbarte Felder erscheinen
+  // statt leerem Raum. Beim Loslassen wird das Zentrum passend nachgezogen.
+  const PAD = 5;
+  const RP = R + PAD;
   const px = (d) => M + (d + R + 0.5) * CELL;
   const edge = (d) => M + (d + R) * CELL;
 
@@ -273,8 +278,8 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
     vills = "",
     ruler = "";
 
-  for (let dy = -R; dy <= R; dy++) {
-    for (let dx = -R; dx <= R; dx++) {
+  for (let dy = -RP; dy <= RP; dy++) {
+    for (let dx = -RP; dx <= RP; dx++) {
       const wx = center.x + dx,
         wy = center.y + dy;
       const cx = px(dx),
@@ -301,8 +306,8 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
   }
 
   // Dörfer + Beschriftung (über dem Terrain)
-  for (let dy = -R; dy <= R; dy++) {
-    for (let dx = -R; dx <= R; dx++) {
+  for (let dy = -RP; dy <= RP; dy++) {
+    for (let dx = -RP; dx <= RP; dx++) {
       const wx = center.x + dx,
         wy = center.y + dy;
       const t = byPos[`${wx},${wy}`];
@@ -360,7 +365,7 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
   for (const n of nodes || []) {
     const dx = n.x - center.x,
       dy = n.y - center.y;
-    if (Math.abs(dx) > R || Math.abs(dy) > R) continue;
+    if (Math.abs(dx) > RP || Math.abs(dy) > RP) continue;
     const cx = px(dx),
       cy = px(dy);
     const col = NODE_COL[n.res] || WM.inkD;
@@ -430,11 +435,13 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
     ruler += `<text x="${M - 8}" y="${(p + 3.5).toFixed(1)}" text-anchor="middle" font-size="10" fill="${WM.ink}" font-family="Georgia,serif" opacity="0.75">${wy}</text>`;
   }
 
-  // feines Kartografengitter
+  // feines Kartografengitter (über den Puffer hinweg, damit es beim Ziehen mitläuft)
   let grid = `<g stroke="${WM.ink}" stroke-width="0.5" opacity="0.16">`;
-  for (let i = 0; i <= N; i++) {
-    grid += `<line x1="${M + i * CELL}" y1="${M}" x2="${M + i * CELL}" y2="${M + inner}"/>`;
-    grid += `<line x1="${M}" y1="${M + i * CELL}" x2="${M + inner}" y2="${M + i * CELL}"/>`;
+  const gLo = -PAD * CELL,
+    gHi = inner + PAD * CELL;
+  for (let i = -PAD; i <= N + PAD; i++) {
+    grid += `<line x1="${M + i * CELL}" y1="${M + gLo}" x2="${M + i * CELL}" y2="${M + gHi}"/>`;
+    grid += `<line x1="${M + gLo}" y1="${M + i * CELL}" x2="${M + gHi}" y2="${M + i * CELL}"/>`;
   }
   grid += "</g>";
 
@@ -481,12 +488,14 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
 
     <rect x="0" y="0" width="${W}" height="${W}" fill="url(#wmParch)"/>
     <rect x="0" y="0" width="${W}" height="${W}" filter="url(#wmPaper)" opacity="0.6"/>
+    <g class="wm-scroll">
     ${sea}
     ${land}
     ${nodesLayer}
     ${grid}
     ${vills}
     ${moves}
+    </g>
     ${compass}
     <rect x="0" y="0" width="${W}" height="${W}" fill="url(#wmVignette)" pointer-events="none"/>
     ${ruler}

@@ -23,11 +23,16 @@
   // onWorldPan(dxCells, dyCells): optional. Wird beim Loslassen aufgerufen,
   // wenn bei Zoom = 1 gezogen wurde, um das Weltzentrum zu verschieben.
   // cellSize: Kantenlänge eines Feldes in Pixeln (zur Umrechnung Zug → Felder).
-  function enableZoomPan(container, key, onWorldPan, cellSize) {
+  // panLimit: maximale Zugweite in Pixeln (Größe des gerenderten Puffers).
+  function enableZoomPan(container, key, onWorldPan, cellSize, panLimit) {
     if (!container) return;
     const svg = container.querySelector("svg");
     if (!svg) return;
     const CELL = cellSize || 58;
+    const LIMIT = panLimit || 0;
+    // Verschiebbare Inhaltsebene der Weltkarte (Terrain/Dörfer). Existiert nur
+    // dort; beim Ziehen wird diese Gruppe innerhalb des Kartenrahmens bewegt.
+    const scroll = svg.querySelector(".wm-scroll");
 
     const st = store[key] || (store[key] = { s: 1, tx: 0, ty: 0 });
 
@@ -164,8 +169,9 @@
           container.style.cursor = "grabbing";
           e.preventDefault();
         }
-      } else if (pointers.size === 1 && panStart && onWorldPan) {
-        // Zoom = 1: die ganze Weltkarte verschieben. Live-Vorschau per Transform,
+      } else if (pointers.size === 1 && panStart && onWorldPan && scroll) {
+        // Zoom = 1: die Karten-Inhaltsebene innerhalb des Rahmens verschieben.
+        // Live-Vorschau per Transform der Gruppe, begrenzt auf den Puffer;
         // beim Loslassen wird der Zug in Felder umgerechnet (siehe endPointer).
         const dx = p.x - panStart.x;
         const dy = p.y - panStart.y;
@@ -178,9 +184,18 @@
           }
         }
         if (moved) {
-          worldDX = dx;
-          worldDY = dy;
-          svg.style.transform = `translate(${dx}px, ${dy}px) scale(1)`;
+          // Zug (Container-Pixel) in SVG-Einheiten umrechnen, da das SVG auf die
+          // Containerbreite skaliert ist. Dann auf den Puffer begrenzen.
+          const k =
+            svg.viewBox && svg.viewBox.baseVal && svg.clientWidth
+              ? svg.viewBox.baseVal.width / svg.clientWidth
+              : 1;
+          worldDX = clamp(dx * k, -LIMIT, LIMIT);
+          worldDY = clamp(dy * k, -LIMIT, LIMIT);
+          scroll.setAttribute(
+            "transform",
+            `translate(${worldDX.toFixed(1)}, ${worldDY.toFixed(1)})`,
+          );
           container.style.cursor = "grabbing";
           e.preventDefault();
         }
@@ -198,7 +213,7 @@
       if (pointers.size < 2) pinch = null;
       if (pointers.size === 0) {
         panStart = null;
-        // Welt-Zug abschließen: Pixel → Felder umrechnen und Zentrum verschieben.
+        // Welt-Zug abschließen: SVG-Einheiten → Felder umrechnen und Zentrum verschieben.
         if (worldDX !== 0 || worldDY !== 0) {
           const cx = Math.round(-worldDX / CELL);
           const cy = Math.round(-worldDY / CELL);
@@ -206,9 +221,9 @@
           worldDY = 0;
           if ((cx || cy) && onWorldPan) {
             onWorldPan(cx, cy); // löst Neuzeichnen mit neuem Zentrum aus
-          } else {
-            // Zu kleiner Zug: Vorschau zurücksetzen.
-            svg.style.transform = `translate(${st.tx}px, ${st.ty}px) scale(${st.s})`;
+          } else if (scroll) {
+            // Zu kleiner Zug: Inhaltsebene zurücksetzen.
+            scroll.removeAttribute("transform");
           }
         }
         if (st.s > 1 || onWorldPan) container.style.cursor = "grab";

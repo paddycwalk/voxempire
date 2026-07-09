@@ -2159,7 +2159,9 @@ export function getState(user) {
       rates: Object.fromEntries(
         RES.map((r) => [
           r,
-          Math.round(prodPerHour(v.buildings[r]) * productionMultiplier(v, now)),
+          Math.round(
+            prodPerHour(v.buildings[r]) * productionMultiplier(v, now),
+          ),
         ]),
       ),
       storage: storageCap(v.buildings.lager),
@@ -2423,8 +2425,7 @@ export async function shopCaptureOrder(user, orderId) {
     at: rec.grantedAt,
     test: rec.test,
   });
-  if (user.purchases.length > 100)
-    user.purchases = user.purchases.slice(-100);
+  if (user.purchases.length > 100) user.purchases = user.purchases.slice(-100);
 
   return {
     granted: true,

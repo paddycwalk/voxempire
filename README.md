@@ -23,15 +23,15 @@ Beenden (Strg+C) gespeichert. Solange der Server läuft, läuft die Welt.
 
 ### Konfiguration (Umgebungsvariablen)
 
-| Variable             | Default     | Bedeutung                                              |
-| -------------------- | ----------- | ------------------------------------------------------ |
-| `PORT`               | `8090`      | HTTP-Port                                              |
-| `VOX_SPEED`          | `3`         | Weltgeschwindigkeit (Produktion ×, Bau-/Reisezeiten ÷) |
-| `VOX_PROTECTION_MIN` | `1440`      | Anfängerschutz in Minuten (0 = aus)                    |
-| `VOX_DB`             | `./db.json` | Pfad zur Spielstand-Datei                              |
-| `PAYPAL_ENV`         | `sandbox`   | PayPal-Umgebung für den Item-Shop (`sandbox`/`live`)   |
+| Variable             | Default     | Bedeutung                                               |
+| -------------------- | ----------- | ------------------------------------------------------- |
+| `PORT`               | `8090`      | HTTP-Port                                               |
+| `VOX_SPEED`          | `3`         | Weltgeschwindigkeit (Produktion ×, Bau-/Reisezeiten ÷)  |
+| `VOX_PROTECTION_MIN` | `1440`      | Anfängerschutz in Minuten (0 = aus)                     |
+| `VOX_DB`             | `./db.json` | Pfad zur Spielstand-Datei                               |
+| `PAYPAL_ENV`         | `sandbox`   | PayPal-Umgebung für den Item-Shop (`sandbox`/`live`)    |
 | `PAYPAL_CLIENT_ID`   | –           | Client-ID der PayPal-REST-App (aktiviert echte Zahlung) |
-| `PAYPAL_SECRET`      | –           | Secret der PayPal-REST-App                             |
+| `PAYPAL_SECRET`      | –           | Secret der PayPal-REST-App                              |
 
 Beispiel für eine schnelle Testrunde: `VOX_SPEED=50 VOX_PROTECTION_MIN=1 node server.js`
 

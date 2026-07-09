@@ -268,7 +268,8 @@ const routes = {
     auth: true,
     fn: (u, b) => game.shopCaptureOrder(u, b.orderId),
   },
-};function findRoute(method, pathname) {
+};
+function findRoute(method, pathname) {
   for (const [key, route] of Object.entries(routes)) {
     const [m, p] = key.split(/\s+/);
     if (m === method && p === pathname) return route;

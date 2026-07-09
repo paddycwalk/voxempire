@@ -18,7 +18,8 @@ const BASE =
     ? "https://api-m.paypal.com"
     : "https://api-m.sandbox.paypal.com";
 const CLIENT_ID = process.env.PAYPAL_CLIENT_ID || "";
-const SECRET = process.env.PAYPAL_SECRET || process.env.PAYPAL_CLIENT_SECRET || "";
+const SECRET =
+  process.env.PAYPAL_SECRET || process.env.PAYPAL_CLIENT_SECRET || "";
 
 // Shop läuft mit echter Bezahlung nur, wenn beide Zugangsdaten vorliegen.
 export const paypalConfigured = Boolean(CLIENT_ID && SECRET);
@@ -63,7 +64,9 @@ export async function createOrder({
             currency_code: currency,
             value: Number(value).toFixed(2),
           },
-          description: description ? String(description).slice(0, 127) : undefined,
+          description: description
+            ? String(description).slice(0, 127)
+            : undefined,
           custom_id: reference ? String(reference).slice(0, 127) : undefined,
         },
       ],

@@ -1688,7 +1688,9 @@ function transportCardHtml() {
   const others = (state.villages || []).filter((v) => !v.active);
   if (others.length < 1) return "";
   const opts = others
-    .map((v) => `<option value="${v.id}">${esc(v.name)} (${v.x}|${v.y})</option>`)
+    .map(
+      (v) => `<option value="${v.id}">${esc(v.name)} (${v.x}|${v.y})</option>`,
+    )
     .join("");
   const canSend = state.village.buildings.markt.level >= 1;
   return `
@@ -2622,8 +2624,7 @@ renderers.shop = async () => {
                 toast(e.message, true);
               }
             },
-            onError: () =>
-              toast("PayPal-Zahlung fehlgeschlagen.", true),
+            onError: () => toast("PayPal-Zahlung fehlgeschlagen.", true),
           })
           .render(container);
       });
