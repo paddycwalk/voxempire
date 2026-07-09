@@ -199,6 +199,48 @@ function ownedVillages(user) {
   return Object.values(db.villages).filter((v) => v.owner === key);
 }
 
+// ---------------- Nebel des Krieges (Fog of War) ----------------
+// Sichtweite rund um eigene Dörfer (Chebyshev-Distanz in Feldern), die immer
+// aufgedeckt ist. Alles Weitere muss mit Spähern erkundet werden.
+const OWN_VISION = 3;
+// Radius, den ein Spähzug um sein Ziel dauerhaft aufdeckt.
+const SCOUT_REVEAL = 2;
+
+// Persistent erkundete Felder eines Spielers als Set von "x,y"-Schlüsseln.
+function exploredSet(user) {
+  if (!Array.isArray(user.explored)) user.explored = [];
+  return new Set(user.explored);
+}
+
+// Felder im Umkreis (Chebyshev) dauerhaft für den Spieler aufdecken.
+function markExplored(user, cx, cy, radius) {
+  const seen = exploredSet(user);
+  let added = false;
+  for (let y = cy - radius; y <= cy + radius; y++) {
+    for (let x = cx - radius; x <= cx + radius; x++) {
+      if (x < 0 || y < 0 || x >= WORLD_SIZE || y >= WORLD_SIZE) continue;
+      const k = `${x},${y}`;
+      if (!seen.has(k)) {
+        seen.add(k);
+        added = true;
+      }
+    }
+  }
+  if (added) user.explored = [...seen];
+}
+
+// Prüft, ob ein Feld für den Spieler sichtbar ist: entweder in Sichtweite eines
+// eigenen Dorfes oder bereits erkundet. Ohne Nutzer (z. B. intern) immer sichtbar.
+function tileVisible(x, y, ownedCoords, seen) {
+  if (!seen) return true;
+  if (seen.has(`${x},${y}`)) return true;
+  for (const o of ownedCoords) {
+    if (Math.abs(o.x - x) <= OWN_VISION && Math.abs(o.y - y) <= OWN_VISION)
+      return true;
+  }
+  return false;
+}
+
 // Gesamtpunkte eines Spielers über all seine Dörfer.
 function userPoints(user) {
   let p = 0;
@@ -582,6 +624,39 @@ export function scout(user, x, y, count) {
   return { arrival: at };
 }
 
+// Späher ins Ungewisse schicken, um ein Feld der Weltkarte zu erkunden.
+// Anders als beim Spähen braucht es kein Zieldorf: Beim Eintreffen wird die
+// Umgebung dauerhaft aufgedeckt (Nebel des Krieges), danach kehren die Späher heim.
+export function explore(user, x, y, count) {
+  const v = db.villages[user.villageId];
+  touchVillage(v);
+  x = Math.floor(Number(x));
+  y = Math.floor(Number(y));
+  if (x < 0 || y < 0 || x >= WORLD_SIZE || y >= WORLD_SIZE)
+    fail("Ziel liegt außerhalb der Welt.");
+  if (x === v.x && y === v.y) fail("Dein eigenes Dorf ist längst bekannt.");
+  const n = Math.max(0, Math.floor(Number(count || 0)));
+  if (n === 0) fail("Wähle mindestens einen Späher.");
+  if (n > (v.units.spaeher || 0)) fail("Nicht genügend Späher.");
+
+  v.units.spaeher -= n;
+  const units = { spaeher: n };
+  const dist = Math.hypot(v.x - x, v.y - y);
+  const start = Date.now();
+  const at = start + travelTimeMs(dist, units);
+  db.events.push({
+    id: nextId("e"),
+    type: "explore",
+    at,
+    start,
+    from: v.id,
+    tx: x,
+    ty: y,
+    units,
+  });
+  return { arrival: at };
+}
+
 // Bewohner auf ein Rohstoffvorkommen der Weltkarte schicken.
 // Sie reisen hin, sammeln (gatherWorkMs) und kehren mit Rohstoffen zurück.
 // Optional können Wachen (Truppen) mitgeschickt werden, die die Bewohner
@@ -786,6 +861,7 @@ export function processEvents(now = Date.now()) {
   for (const ev of due) {
     if (ev.type === "attack") resolveAttack(ev, now);
     else if (ev.type === "scout") resolveScout(ev, now);
+    else if (ev.type === "explore") resolveExplore(ev, now);
     else if (ev.type === "return") resolveReturn(ev);
     else if (ev.type === "reinforce") resolveReinforce(ev, now);
     else if (ev.type === "gather") resolveGather(ev, now);
@@ -1014,6 +1090,10 @@ function resolveScout(ev, now) {
   touchVillage(av, now);
   touchVillage(dv, now);
 
+  // Die Späher haben das Zielgebiet erreicht: Umgebung dauerhaft aufdecken.
+  const scoutOwner = db.users[av.owner];
+  if (scoutOwner) markExplored(scoutOwner, dv.x, dv.y, SCOUT_REVEAL);
+
   const sent = ev.units.spaeher || 0;
   const defScouts = dv.units.spaeher || 0;
 
@@ -1095,6 +1175,45 @@ function resolveScout(ev, now) {
       from: dv.id,
       to: av.id,
       units: { spaeher: survivors },
+    });
+  }
+}
+
+// Erkundungsmission: Späher erreichen ein Feld, decken die Umgebung dauerhaft
+// auf und kehren anschließend heim. Die Rückkehr trägt die Start-Koordinaten
+// fürs Karten-Rendering, da es am Zielpunkt kein Herkunfts-Dorf gibt.
+function resolveExplore(ev, now) {
+  const av = db.villages[ev.from];
+  if (!av) return;
+  touchVillage(av, now);
+  const owner = db.users[av.owner];
+  if (owner) markExplored(owner, ev.tx, ev.ty, SCOUT_REVEAL);
+
+  const survivors = ev.units.spaeher || 0;
+  if (survivors > 0) {
+    const back = travelTimeMs(Math.hypot(av.x - ev.tx, av.y - ev.ty), {
+      spaeher: survivors,
+    });
+    db.events.push({
+      id: nextId("e"),
+      type: "return",
+      at: now + back,
+      start: now,
+      from: av.id,
+      to: av.id,
+      units: { spaeher: survivors },
+      fromX: ev.tx,
+      fromY: ev.ty,
+    });
+  }
+  if (owner) {
+    addReport(owner, {
+      time: now,
+      kind: "Erkundung",
+      title: `🧭 Gebiet um (${ev.tx}|${ev.ty}) erkundet`,
+      x: ev.tx,
+      y: ev.ty,
+      villageId: av.id,
     });
   }
 }
@@ -1981,10 +2100,18 @@ export function claimQuest(user, id) {
 
 export function mapView(cx, cy, radius = 6, user = null) {
   const myKey = user ? user.name.toLowerCase() : null;
+  // Nebel des Krieges: nur eigene Sichtweite + erkundete Felder sind sichtbar.
+  const seen = user ? exploredSet(user) : null;
+  const ownedCoords = user
+    ? ownedVillages(user).map((v) => ({ x: v.x, y: v.y }))
+    : [];
+  const visible = (x, y) => tileVisible(x, y, ownedCoords, seen);
+
   const tiles = [];
   for (const [key, vid] of Object.entries(db.world)) {
     const [x, y] = key.split(",").map(Number);
     if (Math.abs(x - cx) > radius || Math.abs(y - cy) > radius) continue;
+    if (!visible(x, y)) continue; // unerkundete Dörfer bleiben verborgen
     const v = db.villages[vid];
     const owner = db.users[v.owner];
     const alliance = owner.allianceId ? db.alliances[owner.allianceId] : null;
@@ -2005,16 +2132,29 @@ export function mapView(cx, cy, radius = 6, user = null) {
       conquest,
     });
   }
-  // Rohstoffvorkommen im Sichtfenster (nur auf freien Feldern) mitliefern.
+  // Rohstoffvorkommen im Sichtfenster (nur auf freien, erkundeten Feldern).
   const nodes = [];
   for (let y = cy - radius; y <= cy + radius; y++) {
     for (let x = cx - radius; x <= cx + radius; x++) {
       if (db.world[`${x},${y}`]) continue;
+      if (!visible(x, y)) continue;
       const node = resourceNodeAt(x, y);
       if (node) nodes.push({ x, y, res: node.res, richness: node.richness });
     }
   }
-  return { villages: tiles, nodes };
+  // Erkundete Felder für das gesamte gerenderte Fenster (inkl. Client-Puffer PAD=5)
+  // als "x,y"-Liste; der Client legt darüber den Nebel für alles Übrige.
+  let explored = null;
+  if (user) {
+    explored = [];
+    const viewR = radius + 5;
+    for (let y = cy - viewR; y <= cy + viewR; y++) {
+      for (let x = cx - viewR; x <= cx + viewR; x++) {
+        if (visible(x, y)) explored.push(`${x},${y}`);
+      }
+    }
+  }
+  return { villages: tiles, nodes, explored };
 }
 
 export function ranking(user) {
@@ -2133,7 +2273,8 @@ export function getState(user) {
       (e) =>
         ((e.type === "attack" ||
           e.type === "scout" ||
-          e.type === "reinforce") &&
+          e.type === "reinforce" ||
+          e.type === "explore") &&
           e.from === v.id) ||
         (e.type === "return" && e.to === v.id) ||
         (e.type === "transport" && (e.from === v.id || e.to === v.id)) ||
@@ -2194,11 +2335,14 @@ export function getState(user) {
         };
       }
       const other = db.villages[e.type === "return" ? e.from : e.to];
-      // Rückkehr läuft zum eigenen Dorf, Angriff/Spähen vom eigenen Dorf weg
-      const fromX = e.type === "return" ? other?.x : v.x;
-      const fromY = e.type === "return" ? other?.y : v.y;
-      const toX = e.type === "return" ? v.x : other?.x;
-      const toY = e.type === "return" ? v.y : other?.y;
+      // Rückkehr läuft zum eigenen Dorf, Angriff/Spähen vom eigenen Dorf weg.
+      // Bei Erkundungs-Rückkehr fehlt ein Herkunfts-Dorf → Start-Koordinaten nutzen.
+      const fromX =
+        e.type === "return" ? (e.fromX ?? other?.x) : v.x;
+      const fromY =
+        e.type === "return" ? (e.fromY ?? other?.y) : v.y;
+      const toX = e.type === "return" ? v.x : e.type === "explore" ? e.tx : other?.x;
+      const toY = e.type === "return" ? v.y : e.type === "explore" ? e.ty : other?.y;
       return {
         type: e.type,
         at: e.at,
@@ -2206,9 +2350,14 @@ export function getState(user) {
         units: e.units,
         loot: e.loot || null,
         id: e.id,
-        target: other ? other.name : "?",
-        x: other?.x,
-        y: other?.y,
+        target:
+          e.type === "explore"
+            ? `Erkundung (${e.tx}|${e.ty})`
+            : other
+              ? other.name
+              : "?",
+        x: e.type === "explore" ? e.tx : other?.x,
+        y: e.type === "explore" ? e.ty : other?.y,
         fromX,
         fromY,
         toX,

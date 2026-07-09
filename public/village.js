@@ -254,6 +254,73 @@ function smoke(x, y) {
   </g>`;
 }
 
+// ---------- Dorfbewohner (kleine Männchen, die über den Hof laufen) ----------
+// Gezeichnet um den lokalen Ursprung (Füße bei 0,0, wächst nach oben),
+// damit animateMotion die Figur entlang eines Kachelpfads bewegen kann.
+function personArt(tunic, hair, skin) {
+  return (
+    `<ellipse cx="0" cy="1.5" rx="6" ry="2.4" fill="rgba(0,0,0,0.20)"/>` + // Schatten
+    `<rect x="-3.4" y="-7" width="2.8" height="7.5" fill="${VS.woodD}"/>` + // Beine
+    `<rect x="0.6" y="-7" width="2.8" height="7.5" fill="${VS.woodD}"/>` +
+    `<rect x="-5.8" y="-17" width="2.2" height="8" fill="${tunic}"/>` + // Arme
+    `<rect x="3.6" y="-17" width="2.2" height="8" fill="${tunic}"/>` +
+    P(
+      [
+        [-4.6, -7.5],
+        [4.6, -7.5],
+        [3.4, -18],
+        [-3.4, -18],
+      ],
+      tunic,
+    ) + // Kittel
+    C(0, -21.5, 3.8, skin) + // Kopf
+    P(
+      [
+        [-3.8, -21.5],
+        [3.8, -21.5],
+        [2.8, -25],
+        [-2.8, -25],
+      ],
+      hair,
+    ) // Haar/Kappe
+  );
+}
+
+function folk() {
+  const skins = ["#e2b48c", "#d39a6e", "#c88a5e"];
+  // Jede Route läuft über freie Hof-Kacheln (r ≥ 1), damit die Bewohner
+  // vor der hinteren Gebäudereihe laufen. calcMode="paced" = konstante Geschw.
+  const cfg = [
+    { r: [[1, 1], [3, 1], [3, 3], [1, 3]], t: VS.cloth1, h: "#4a3524", d: 26 },
+    { r: [[0, 1], [1, 1], [1, 2], [0, 3]], t: VS.cloth2, h: "#5a3a1e", d: 19 },
+    { r: [[4, 1], [4, 3], [3, 2]], t: VS.leaf, h: "#2a1c12", d: 16 },
+    { r: [[1, 3], [1, 4], [3, 4], [3, 3]], t: "#8a6d3b", h: "#6b4a2a", d: 23 },
+    { r: [[2, 1], [3, 2], [2, 3], [1, 2]], t: VS.plasterD, h: "#3a2a1a", d: 21 },
+  ];
+  return (
+    `<g class="vs-folk">` +
+    cfg
+      .map((c, i) => {
+        const path =
+          "M" +
+          c.r
+            .map(([cc, rr]) => {
+              const [x, y] = iso(cc, rr);
+              return `${x.toFixed(1)} ${y.toFixed(1)}`;
+            })
+            .join(" L") +
+          " Z";
+        const skin = skins[i % skins.length];
+        return `<g>
+      <g class="vs-walk" style="animation-delay:${(i * 0.13).toFixed(2)}s">${personArt(c.t, c.h, skin)}</g>
+      <animateMotion dur="${c.d}s" begin="-${i * 3}s" repeatCount="indefinite" rotate="0" calcMode="paced" path="${path}"/>
+    </g>`;
+      })
+      .join("") +
+    `</g>`
+  );
+}
+
 // ---------- Gebäude (Anker: Kachel-Mitte 0,0; Basis y=0, wächst nach oben) ----------
 
 function bRathaus() {
@@ -1001,6 +1068,7 @@ function renderVillageScene(state, meta, selected) {
     ${groundTiles()}
     ${walls(mauerLvl, false)}
     ${objSvg}
+    ${folk()}
     ${walls(mauerLvl, true)}
     <g class="vs-markers">${markerSvg}</g>
   </svg>`;

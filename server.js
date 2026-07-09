@@ -110,6 +110,10 @@ const routes = {
     auth: true,
     fn: (u, b) => game.scout(u, Number(b.x), Number(b.y), b.count),
   },
+  "POST /api/explore": {
+    auth: true,
+    fn: (u, b) => game.explore(u, Number(b.x), Number(b.y), b.count),
+  },
   "POST /api/gather": {
     auth: true,
     fn: (u, b) => game.gather(u, Number(b.x), Number(b.y), b.workers, b.guards),

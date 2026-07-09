@@ -5,7 +5,7 @@
 // Kein Bild-Asset: alles wird pro Feld deterministisch aus
 // den Koordinaten gezeichnet, damit die Welt bei jedem
 // Scrollen gleich aussieht.
-// Öffentliche API: renderWorldMap(tiles, center, R, state, selected)
+// Öffentliche API: renderWorldMap(tiles, nodes, center, R, state, selected, selNode, explored)
 // ============================================================
 "use strict";
 
@@ -253,7 +253,7 @@ function wmCompass(cx, cy, r) {
 }
 
 // ---------- Hauptfunktion ----------
-function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
+function renderWorldMap(tiles, nodes, center, R, state, selected, selNode, explored) {
   const CELL = 58,
     M = 46;
   const N = 2 * R + 1;
@@ -266,6 +266,12 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
   const RP = R + PAD;
   const px = (d) => M + (d + R + 0.5) * CELL;
   const edge = (d) => M + (d + R) * CELL;
+
+  // Nebel des Krieges: nur erkundete Felder ("x,y") sind sichtbar, der Rest
+  // wird verdeckt. Ohne explored-Angabe (null) bleibt die Karte komplett offen.
+  const fogOn = explored instanceof Set;
+  const isSeen = (wx, wy) => !fogOn || explored.has(`${wx},${wy}`);
+  let fog = "";
 
   const byPos = {};
   for (const t of tiles) byPos[`${t.x},${t.y}`] = t;
@@ -285,6 +291,13 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
       const cx = px(dx),
         cy = px(dy);
       const t = byPos[`${wx},${wy}`];
+
+      // Unerkundetes Feld: kein Terrain zeichnen, stattdessen Nebelkachel.
+      // Klickbar, um Späher zur Erkundung dorthin zu schicken.
+      if (!isSeen(wx, wy)) {
+        fog += `<rect class="wm-fog-hit" x="${(edge(dx) - 1).toFixed(1)}" y="${(edge(dy) - 1).toFixed(1)}" width="${CELL + 2}" height="${CELL + 2}" fill="url(#wmFog)" onclick="exploreTile(${wx},${wy})"/>`;
+        continue;
+      }
 
       if (t) {
         // Feld mit Dorf: immer Land + Grasbüschel
@@ -346,13 +359,21 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
            </g>`
         : "";
 
-      const name = esc(t.owner);
+      // Doppelte Beschriftung: Dorfname (Haupttitel) + Besitzer als Kennzeichnung,
+      // welchem Spieler das Dorf gehört. Farbe unterscheidet eigen/Allianz/fremd,
+      // eigenes Dorf wird zusätzlich mit "(Du)" markiert.
+      const villName = esc(t.village || `${t.owner}s Dorf`);
+      const ownerMark = own ? `${esc(t.owner)} (Du)` : esc(t.owner);
+      // Beschriftung mit weißem Kontur-Untergrund für Lesbarkeit auf jedem Terrain.
+      const lbl = (y, txt, size, weight, italic) =>
+        `<text x="${cx}" y="${y}" text-anchor="middle" font-size="${size}" font-family="Georgia,'Times New Roman',serif"${italic ? ' font-style="italic"' : ""} fill="#fff" stroke="#fff" stroke-width="2.6" stroke-linejoin="round" opacity="0.7">${txt}</text>
+         <text x="${cx}" y="${y}" text-anchor="middle" font-size="${size}" font-family="Georgia,'Times New Roman',serif"${italic ? ' font-style="italic"' : ""} fill="${col}" font-weight="${weight}">${txt}</text>`;
       vills += `<g class="wm-village" onclick='selectTile(${JSON.stringify(t)})'>
         <rect class="wm-hit" x="${(cx - CELL / 2).toFixed(1)}" y="${(cy - CELL / 2).toFixed(1)}" width="${CELL}" height="${CELL}" rx="4" fill="transparent"/>
         ${ring}${glyph}${shield}${conq}
         <g class="wm-label">
-          <text x="${cx}" y="${(cy + 27).toFixed(1)}" text-anchor="middle" font-size="10.5" font-family="Georgia,'Times New Roman',serif" font-style="italic" fill="#fff" stroke="#fff" stroke-width="2.6" stroke-linejoin="round" opacity="0.7">${name}</text>
-          <text x="${cx}" y="${(cy + 27).toFixed(1)}" text-anchor="middle" font-size="10.5" font-family="Georgia,'Times New Roman',serif" font-style="italic" fill="${col}" font-weight="600">${name}</text>
+          ${lbl((cy + 27).toFixed(1), villName, 10.5, 600, true)}
+          ${lbl((cy + 38).toFixed(1), ownerMark, 8.5, 500, false)}
         </g>
       </g>`;
     }
@@ -394,6 +415,7 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
   const moveCol = {
     attack: "#c0392b",
     scout: "#3b6ea5",
+    explore: "#7a5cae",
     return: "#4b7a3a",
     gather: "#b8860b",
     gatherReturn: "#4b7a3a",
@@ -484,6 +506,15 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
         <stop offset="0.6" stop-color="#000" stop-opacity="0"/>
         <stop offset="1" stop-color="${WM.inkD}" stop-opacity="0.32"/>
       </radialGradient>
+      <radialGradient id="wmFog" cx="0.5" cy="0.4" r="0.85">
+        <stop offset="0" stop-color="#4a4438"/>
+        <stop offset="1" stop-color="#2b2620"/>
+      </radialGradient>
+      <filter id="wmFogTex" x="-5%" y="-5%" width="110%" height="110%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.035 0.045" numOctaves="3" seed="11" result="n"/>
+        <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.55  0 0 0 0 0.52  0 0 0 0 0.46  0 0 0 0.5 0" result="clouds"/>
+        <feComposite in="clouds" in2="SourceGraphic" operator="over"/>
+      </filter>
     </defs>
 
     <rect x="0" y="0" width="${W}" height="${W}" fill="url(#wmParch)"/>
@@ -495,6 +526,7 @@ function renderWorldMap(tiles, nodes, center, R, state, selected, selNode) {
     ${grid}
     ${vills}
     ${moves}
+    ${fog ? `<g class="wm-fog" filter="url(#wmFogTex)">${fog}</g>` : ""}
     </g>
     ${compass}
     <rect x="0" y="0" width="${W}" height="${W}" fill="url(#wmVignette)" pointer-events="none"/>

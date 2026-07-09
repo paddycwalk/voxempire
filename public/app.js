@@ -34,6 +34,7 @@ let activeTab = "dorf";
 let mapCenter = null; // {x,y}
 let selectedTile = null;
 let selectedNode = null; // aktuell gewähltes Rohstoffvorkommen auf der Karte
+let selectedExplore = null; // {x,y}: angeklicktes Nebelfeld zum Erkunden
 let pendingMapSelect = null; // {x,y}: nach dem Kartenwechsel dieses Dorf auswählen
 // Zuletzt erspähte Verteidigungsdaten je Zielkoordinate ("x,y") aus eigenen
 // Spähberichten – speist die Erfolgsprognose für Angriff & Spähen.
@@ -929,9 +930,11 @@ function movementsHtml() {
         ? `⚔️ Angriff auf ${esc(m.target)} (${m.x}|${m.y})`
         : m.type === "scout"
           ? `🔍 Spähen von ${esc(m.target)} (${m.x}|${m.y})`
-          : m.type === "reinforce"
-            ? `🤝 Verstärkung nach ${esc(m.target)} (${m.x}|${m.y})`
-            : `↩️ Rückkehr von ${esc(m.target)}`;
+          : m.type === "explore"
+            ? `🧭 Erkundung (${m.x}|${m.y})`
+            : m.type === "reinforce"
+              ? `🤝 Verstärkung nach ${esc(m.target)} (${m.x}|${m.y})`
+              : `↩️ Rückkehr von ${esc(m.target)}`;
     const loot = m.loot ? ` · Beute: ${costHtml(m.loot)}` : "";
     const cancel =
       (m.type === "attack" || m.type === "scout") && m.id
@@ -1181,7 +1184,11 @@ window.actionTrain = async (key) => {
 
 renderers.karte = async () => {
   const el = $("#tab-karte");
-  el.innerHTML = '<h2>Weltkarte</h2><p class="muted">Lade …</p>';
+  // Beim Verschieben/Springen die vorhandene Karte stehen lassen, bis die neuen
+  // Daten da sind — sonst blitzt zwischen "Lade …" und Neuzeichnung Schwarz auf.
+  if (!el.querySelector(".world-map")) {
+    el.innerHTML = '<h2>Weltkarte</h2><p class="muted">Lade …</p>';
+  }
   let data;
   try {
     data = await api(`/api/map?x=${mapCenter.x}&y=${mapCenter.y}`);
@@ -1191,6 +1198,10 @@ renderers.karte = async () => {
   }
 
   const R = 6;
+  // Erkundete Felder (Nebel des Krieges): Server liefert sichtbare "x,y"-Schlüssel.
+  const explored = Array.isArray(data.explored)
+    ? new Set(data.explored)
+    : null;
   const mapSvg = renderWorldMap(
     data.villages || [],
     data.nodes || [],
@@ -1199,6 +1210,7 @@ renderers.karte = async () => {
     state,
     selectedTile,
     selectedNode,
+    explored,
   );
 
   const res = state.village.residents || { idle: 0, total: 0 };
@@ -1226,6 +1238,7 @@ renderers.karte = async () => {
       <span><i class="lg-move-atk"></i> Angriff</span>
       <span><i class="lg-move-scout"></i> Spähen</span>
       <span><i class="lg-move-return"></i> Rückkehr</span>
+      <span><i class="lg-fog"></i> Nebel — anklicken & mit Spähern erkunden</span>
     </div>
     <div class="world-map">${mapSvg}</div>
     <div id="villageDetail" class="village-detail"></div>`;
@@ -1242,11 +1255,13 @@ renderers.karte = async () => {
     if (target) {
       selectedTile = target;
       selectedNode = null;
+      selectedExplore = null;
     }
   }
 
   if (selectedNode) renderNodeDetail();
   else if (selectedTile) renderVillageDetail();
+  else if (selectedExplore) renderExploreDetail();
 };
 
 // Aus der Rangliste heraus auf die Karte springen und das Dorf markieren.
@@ -1254,6 +1269,7 @@ window.showOnMap = (x, y) => {
   mapCenter = { x, y };
   selectedTile = null;
   selectedNode = null;
+  selectedExplore = null;
   pendingMapSelect = { x, y };
   switchTab("karte");
 };
@@ -1277,13 +1293,23 @@ window.centerHome = () => {
 window.selectTile = (t) => {
   selectedTile = t;
   selectedNode = null;
+  selectedExplore = null;
   renderVillageDetail();
 };
 
 window.selectNode = (n) => {
   selectedNode = n;
   selectedTile = null;
+  selectedExplore = null;
   renderNodeDetail();
+};
+
+// Nebelfeld angeklickt: Späher zur Erkundung dorthin schicken.
+window.exploreTile = (x, y) => {
+  selectedExplore = { x, y };
+  selectedTile = null;
+  selectedNode = null;
+  renderExploreDetail();
 };
 
 // ---- Erfolgsprognose (Angriff / Spähen) auf Basis eigener Spähberichte ----
@@ -1658,6 +1684,48 @@ const NODE_META = {
   holz: { icon: "🌲", label: "Wald", res: "Holz" },
   stein: { icon: "⛏️", label: "Steinbruch", res: "Stein" },
   eisen: { icon: "⚒️", label: "Eisenader", res: "Eisen" },
+};
+
+// Angeklicktes Nebelfeld: Späher zur Erkundung dorthin schicken.
+function renderExploreDetail() {
+  const p = selectedExplore;
+  const el = $("#villageDetail");
+  if (!el || !p) return;
+  const dist = Math.hypot(state.village.x - p.x, state.village.y - p.y);
+  const scoutMax = state.village.units.spaeher?.count || 0;
+  el.innerHTML = `
+    <div class="card">
+      <h3 style="margin-top:0">🧭 Unerkundetes Gebiet <small class="muted">(${p.x}|${p.y})</small></h3>
+      <p class="muted small">Dieses Feld liegt im Nebel des Krieges. Schicke Späher hierher, um die Umgebung dauerhaft aufzudecken. Die Späher kehren anschließend heim.</p>
+      <div class="scout-row">
+        <label>Späher (max. ${scoutMax})
+          <input type="number" min="1" max="${scoutMax}" value="${Math.min(scoutMax, 1) || 1}" id="explore-count">
+        </label>
+        <button class="btn primary" ${scoutMax ? "" : "disabled"} onclick="actionExplore()">🧭 Erkunden</button>
+      </div>
+      <div class="attack-preview">
+        <div><span class="muted">Entfernung</span><b>${dist.toFixed(1)} Felder</b></div>
+      </div>
+      ${scoutMax ? "" : '<p class="muted small">Du hast keine Späher. Bilde sie in der Kaserne aus.</p>'}
+    </div>`;
+}
+
+window.actionExplore = async () => {
+  if (!selectedExplore) return;
+  const count = Number($("#explore-count")?.value || 0);
+  try {
+    const r = await api("/api/explore", {
+      x: selectedExplore.x,
+      y: selectedExplore.y,
+      count,
+    });
+    toast(`Späher erkunden das Gebiet! Ankunft: ${fmtTime(r.arrival)}`);
+    selectedExplore = null;
+    await refreshState();
+    renderers.karte();
+  } catch (e) {
+    toast(e.message, true);
+  }
 };
 
 function renderNodeDetail() {

@@ -850,6 +850,11 @@ tr.unit-locked {
 .vs-construct text {
   animation: vsBob 1.6s ease-in-out infinite;
 }
+.vs-walk {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: vsWalk 0.62s ease-in-out infinite;
+}
 .vs-upgrade {
   transform-box: fill-box;
   transform-origin: center;
@@ -945,7 +950,15 @@ tr.unit-locked {
     transform: translateY(-5px) scale(1.12);
   }
 }
-
+@keyframes vsWalk {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+  50% {
+    transform: translateY(-1.6px) scaleY(1.04);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .vs-flag,
   .vs-smoke circle,
@@ -955,6 +968,7 @@ tr.unit-locked {
   .vs-fly,
   .vs-construct text,
   .vs-upgrade,
+  .vs-walk,
   .vs-selring {
     animation: none;
   }
@@ -1134,6 +1148,10 @@ tr.unit-locked {
 }
 .map-legend .lg-node-eisen {
   background: #c9962f;
+}
+.map-legend .lg-fog {
+  background: #2b2620;
+  border-color: #4a4438;
 }
 
 .world-map {
