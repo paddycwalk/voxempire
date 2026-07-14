@@ -511,7 +511,8 @@ function closeVillageMenu() {
 
 // Menü schließen bei Klick außerhalb oder Escape.
 document.addEventListener("pointerdown", (e) => {
-  if (villageMenuOpen && !e.target.closest("#villageSelect")) closeVillageMenu();
+  if (villageMenuOpen && !e.target.closest("#villageSelect"))
+    closeVillageMenu();
 });
 document.addEventListener("keydown", (e) => {
   if (villageMenuOpen && e.key === "Escape") closeVillageMenu();

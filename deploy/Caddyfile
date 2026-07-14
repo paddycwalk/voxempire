@@ -1,0 +1,11 @@
+# Caddy als Reverse-Proxy vor VOXEMPIRE — automatisches HTTPS via Let's Encrypt.
+# "deine-domain.de" durch deine echte Domain ersetzen (A-Record muss auf die Server-IP zeigen).
+#
+# Installation (als root):
+#   cp /opt/voxempire/deploy/Caddyfile /etc/caddy/Caddyfile
+#   systemctl reload caddy
+
+deine-domain.de {
+    encode gzip
+    reverse_proxy localhost:8090
+}

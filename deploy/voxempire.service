@@ -1,0 +1,29 @@
+# systemd-Service für VOXEMPIRE.
+# Installation (als root):
+#   cp /opt/voxempire/deploy/voxempire.service /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now voxempire
+# Logs ansehen:  journalctl -u voxempire -f
+# Neustart:      systemctl restart voxempire
+
+[Unit]
+Description=VOXEMPIRE Game Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=voxempire
+WorkingDirectory=/opt/voxempire
+EnvironmentFile=/opt/voxempire/.env
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+# Sanftes Beenden: gibt dem Server Zeit, ein letztes Mal nach Upstash zu speichern.
+KillSignal=SIGINT
+TimeoutStopSec=15
+NoNewPrivileges=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

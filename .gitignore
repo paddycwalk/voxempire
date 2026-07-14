@@ -3,6 +3,9 @@ db.json
 db.test.json
 *.tmp
 
+# Umgebungsvariablen / Secrets — niemals committen
+.env
+
 # macOS / Editor
 .DS_Store
 
