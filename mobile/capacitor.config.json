@@ -1,0 +1,18 @@
+{
+  "appId": "de.kittelberger.voxempire",
+  "appName": "VOXEMPIRE",
+  "webDir": "www",
+  "server": {
+    "url": "https://DEINE-DOMAIN.example",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#12151c"
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}

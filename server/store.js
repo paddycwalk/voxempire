@@ -45,6 +45,7 @@ function emptyDb() {
     friends: {}, // nameLower -> [nameLower, …] (bestätigte Freundschaften, beidseitig)
     friendRequests: [], // { id, from, to, fromName, toName, time } (from/to = nameLower)
     shopOrders: {}, // orderId -> { user, item, price, status, test, created, ... } (Item-Shop/PayPal)
+    chatReports: [], // Chat-Meldungen: { id, msgId, by, time } (by = nameLower)
   };
 }
 

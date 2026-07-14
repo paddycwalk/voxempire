@@ -402,6 +402,9 @@ async function enterGame() {
   if (!mapCenter) mapCenter = { x: state.village.x, y: state.village.y };
   switchTab("dorf");
   startPolling();
+  // In der nativen App (Capacitor) für Push-Benachrichtigungen registrieren.
+  // Im Browser ein No-Op (initPush prüft window.Capacitor).
+  if (window.initPush) window.initPush(api);
 }
 
 function startPolling() {
@@ -2412,11 +2415,13 @@ renderers.chat = async () => {
     el.innerHTML = `
       <h2>Welt-Chat</h2>
       <div class="card chat-card">
+        <div id="chatBlocked" class="chat-blocked hidden"></div>
         <div id="chatLog" class="chat-log"><p class="muted">Lade …</p></div>
         <div class="chat-input">
           <input id="chatText" maxlength="240" placeholder="Nachricht an alle Spieler …" autocomplete="off">
           <button id="chatSend" class="btn primary">Senden</button>
         </div>
+        <p class="muted chat-hint">Sei fair. Über 🚩 kannst du Nachrichten melden, über 🚫 Spieler blockieren. Wiederholt gemeldete Nachrichten werden automatisch ausgeblendet.</p>
       </div>`;
     $("#chatSend").addEventListener("click", sendChat);
     $("#chatText").addEventListener("keydown", (e) => {
@@ -2429,33 +2434,123 @@ renderers.chat = async () => {
   await pollChat();
 };
 
-function renderChatLog(messages) {
+let chatMeta = { isAdmin: false, blocked: [] };
+
+function renderChatLog(r) {
   const log = $("#chatLog");
   if (!log) return;
+  const messages = r.messages || [];
+  chatMeta = { isAdmin: !!r.isAdmin, blocked: r.blocked || [] };
+  renderBlockedBar();
   // Nur automatisch nach unten scrollen, wenn der Nutzer ohnehin unten steht.
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   log.innerHTML = messages.length
-    ? messages
-        .map((m) => {
-          const mine = m.from === state.user.name;
-          return `<div class="chat-msg${mine ? " mine" : ""}">
-            <span class="chat-meta"><b>${esc(m.from)}</b><time>${chatTime(m.time)}</time></span>
-            <span class="chat-text">${esc(m.text)}</span>
-          </div>`;
-        })
-        .join("")
+    ? messages.map(chatMsgHtml).join("")
     : '<p class="muted">Noch keine Nachrichten. Schreib die erste!</p>';
   if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
+function chatMsgHtml(m) {
+  const mine = m.mine ?? m.from === state.user.name;
+  const name = esc(m.from);
+  // Aktionen für fremde Nachrichten: melden & Absender blockieren.
+  const actions = mine
+    ? ""
+    : `<span class="chat-actions">
+         <button title="Melden" onclick="chatReport('${m.id}')">🚩</button>
+         <button title="${name} blockieren" onclick="chatBlock('${name}')">🚫</button>
+         ${
+           chatMeta.isAdmin
+             ? `<button title="Löschen (Mod)" onclick="chatModDelete('${m.id}')">🗑️</button>
+                <button title="${name} sperren (Mod)" onclick="chatModBan('${name}')">⛔</button>`
+             : ""
+         }
+       </span>`;
+  const modInfo =
+    chatMeta.isAdmin && (m.hidden || m.reports)
+      ? `<span class="chat-modinfo">${m.hidden ? "versteckt" : ""}${
+          m.reports ? ` · ${m.reports} Meldung(en)` : ""
+        }</span>`
+      : "";
+  return `<div class="chat-msg${mine ? " mine" : ""}${m.hidden ? " hidden-msg" : ""}">
+    <span class="chat-meta"><b>${name}</b><time>${chatTime(m.time)}</time>${modInfo}</span>
+    <span class="chat-text">${esc(m.text)}</span>
+    ${actions}
+  </div>`;
+}
+
+function renderBlockedBar() {
+  const bar = $("#chatBlocked");
+  if (!bar) return;
+  if (!chatMeta.blocked.length) {
+    bar.classList.add("hidden");
+    bar.innerHTML = "";
+    return;
+  }
+  bar.classList.remove("hidden");
+  bar.innerHTML =
+    `<span class="muted">Blockiert:</span> ` +
+    chatMeta.blocked
+      .map(
+        (n) =>
+          `<button class="chip" title="Blockierung aufheben" onclick="chatUnblock('${esc(n)}')">${esc(n)} ✕</button>`,
+      )
+      .join(" ");
 }
 
 async function pollChat() {
   try {
     const r = await api("/api/chat");
-    renderChatLog(r.messages || []);
+    renderChatLog(r);
   } catch {
     /* offline? nächster Poll */
   }
 }
+
+window.chatReport = async (id) => {
+  try {
+    const r = await api("/api/chat/report", { id });
+    toast(r.hidden ? "Gemeldet — Nachricht ausgeblendet." : "Nachricht gemeldet.");
+    await pollChat();
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
+window.chatBlock = async (name) => {
+  try {
+    renderChatLog(await api("/api/chat/block", { name }));
+    toast(`${name} blockiert.`);
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
+window.chatUnblock = async (name) => {
+  try {
+    renderChatLog(await api("/api/chat/unblock", { name }));
+    toast(`Blockierung von ${name} aufgehoben.`);
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
+window.chatModDelete = async (id) => {
+  try {
+    await api("/api/chat/delete", { id });
+    toast("Nachricht entfernt.");
+    await pollChat();
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
+window.chatModBan = async (name) => {
+  if (!confirm(`${name} wirklich sperren?`)) return;
+  try {
+    const r = await api("/api/chat/ban", { name });
+    toast(`${r.banned} gesperrt.`);
+    await pollChat();
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
 
 async function sendChat() {
   const input = $("#chatText");
@@ -2465,7 +2560,7 @@ async function sendChat() {
   input.value = "";
   try {
     const r = await api("/api/chat", { text });
-    renderChatLog(r.messages || []);
+    renderChatLog(r);
     input.focus();
   } catch (e) {
     toast(e.message, true);
@@ -3621,7 +3716,59 @@ renderers.profil = async () => {
         <label><input type="checkbox" id="setNotify" ${settings.notifications ? "checked" : ""} onchange="setSetting('notifications', this.checked)"> Benachrichtigungen anzeigen</label>
         <label>Aktualisierungs-Intervall <select id="setPoll" onchange="setSetting('pollMs', Number(this.value))">${pollOpts}</select></label>
       </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Meine Daten &amp; Konto</h3>
+      <p class="muted">Du kannst jederzeit alle zu deinem Konto gespeicherten Daten herunterladen oder dein Konto endgültig löschen.</p>
+      <div class="formrow">
+        <button class="btn" onclick="accountExport()">⬇️ Meine Daten exportieren</button>
+        <button class="btn danger" onclick="accountDelete()">🗑️ Konto endgültig löschen</button>
+      </div>
+      <p class="muted" style="margin-top:10px">
+        <a href="/legal/datenschutz.html" target="_blank" rel="noopener">Datenschutz</a> ·
+        <a href="/legal/impressum.html" target="_blank" rel="noopener">Impressum</a> ·
+        <a href="/legal/agb.html" target="_blank" rel="noopener">AGB</a>
+      </p>
     </div>`;
+};
+
+window.accountExport = async () => {
+  try {
+    const data = await api("/api/account/export");
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `voxempire-daten-${data.account?.name || "konto"}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast("Datenexport heruntergeladen.");
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
+
+window.accountDelete = async () => {
+  if (
+    !confirm(
+      "Konto WIRKLICH löschen? Alle Dörfer, Truppen, Berichte und Freundschaften gehen unwiderruflich verloren.",
+    )
+  )
+    return;
+  const pass = prompt("Zur Bestätigung dein aktuelles Passwort eingeben:");
+  if (pass == null) return;
+  try {
+    await api("/api/account/delete", { pass });
+    toast("Konto gelöscht. Auf Wiedersehen!");
+    showAuth();
+  } catch (e) {
+    toast(e.message, true);
+  }
 };
 
 window.profileRename = async () => {

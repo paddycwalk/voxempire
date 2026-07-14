@@ -12,3 +12,8 @@ db.test.json
 # Node
 node_modules/
 *.log
+
+# Capacitor / native Build-Artefakte (werden auf dem Mac generiert)
+mobile/ios/
+mobile/android/
+mobile/node_modules/

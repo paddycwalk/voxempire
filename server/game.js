@@ -10,6 +10,7 @@
 //     beide Spieler offline sind.
 // ============================================================
 import crypto from "node:crypto";
+import { promisify } from "node:util";
 import { db, nextId } from "./store.js";
 import {
   SPEED,
@@ -20,6 +21,8 @@ import {
   MAX_TRAIN_QUEUE,
   MAX_REPORTS,
   MAX_CHAT,
+  BADWORDS,
+  CHAT_REPORT_HIDE_THRESHOLD,
   MAX_ALLIANCE_MEMBERS,
   CONQUEST_ATTACKS,
   RES,
@@ -57,15 +60,43 @@ import {
   createOrder as ppCreateOrder,
   captureOrder as ppCaptureOrder,
 } from "./paypal.js";
+import { sendToUser } from "./push.js";
 
 export class GameError extends Error {}
 const fail = (msg) => {
   throw new GameError(msg);
 };
 
+// scrypt asynchron: Das Passwort-Hashing (CPU-intensiv) läuft im libuv-Threadpool
+// statt den einzigen Event-Loop-Thread zu blockieren — sonst friert bei jedem
+// Login/jeder Registrierung der komplette Server (inkl. Game-Tick) kurz ein.
+const scryptAsync = promisify(crypto.scrypt);
+async function hashPassword(pass, salt) {
+  const buf = await scryptAsync(String(pass), salt, 32);
+  return buf.toString("hex");
+}
+// Passwortvergleich in konstanter Zeit (verhindert Timing-Angriffe).
+function passwordMatches(hashHex, userHashHex) {
+  const a = Buffer.from(hashHex, "hex");
+  const b = Buffer.from(userHashHex, "hex");
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+// Moderatoren/Admins per Umgebungsvariable, z. B. VOX_ADMINS="paddy,gm2".
+// Sie dürfen Chat-Nachrichten löschen und Spieler sperren (App-Store Guideline 1.2).
+const ADMINS = new Set(
+  String(process.env.VOX_ADMINS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
+);
+export function isAdmin(user) {
+  return !!user && ADMINS.has(user.name.toLowerCase());
+}
+
 // ---------------- Accounts & Sessions ----------------
 
-export function register(name, pass) {
+export async function register(name, pass) {
   name = String(name || "").trim();
   if (!/^[A-Za-z0-9_äöüÄÖÜß-]{3,16}$/.test(name))
     fail("Name: 3–16 Zeichen (Buchstaben, Zahlen, _ -).");
@@ -74,7 +105,7 @@ export function register(name, pass) {
   if (db.users[key]) fail("Dieser Name ist bereits vergeben.");
 
   const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.scryptSync(String(pass), salt, 32).toString("hex");
+  const hash = await hashPassword(pass, salt);
   const village = createVillage(name);
   db.users[key] = {
     name,
@@ -89,7 +120,7 @@ export function register(name, pass) {
   return login(name, pass);
 }
 
-export function login(name, pass) {
+export async function login(name, pass) {
   const user =
     db.users[
       String(name || "")
@@ -97,11 +128,9 @@ export function login(name, pass) {
         .toLowerCase()
     ];
   if (!user) fail("Unbekannter Spielername.");
-  const hash = crypto
-    .scryptSync(String(pass || ""), user.salt, 32)
-    .toString("hex");
-  if (!crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(user.hash)))
-    fail("Falsches Passwort.");
+  const hash = await hashPassword(pass || "", user.salt);
+  if (!passwordMatches(hash, user.hash)) fail("Falsches Passwort.");
+  if (user.banned) fail("Dieses Konto wurde wegen Regelverstoßes gesperrt.");
   const token = crypto.randomBytes(24).toString("hex");
   db.tokens[token] = {
     user: user.name.toLowerCase(),
@@ -121,8 +150,53 @@ export function authUser(token) {
     return null;
   }
   const user = db.users[t.user];
-  if (user) user.lastSeen = Date.now();
-  return user || null;
+  if (!user) return null;
+  // Gesperrte Konten werden ausgeloggt behandelt — keine Aktionen mehr möglich.
+  if (user.banned) {
+    delete db.tokens[token];
+    return null;
+  }
+  user.lastSeen = Date.now();
+  return user;
+}
+
+// Regelmäßige Aufräum-Runde (vom Server-Timer aufgerufen). Ohne sie wüchsen
+// abgelaufene Sessions, nie eingelöste Bestellungen und verwaiste Anfragen
+// unbegrenzt an — die komplette DB wird ja bei jedem Autosave serialisiert.
+const STALE_ORDER_MS = 24 * 3_600_000; // nie bezahlte Bestellungen nach 24 h
+const OLD_GRANTED_MS = 30 * 24 * 3_600_000; // eingelöste Bestellungen nach 30 Tagen
+export function sweep(now = Date.now()) {
+  // 1) Abgelaufene und verwaiste Session-Tokens.
+  for (const [tok, t] of Object.entries(db.tokens)) {
+    if (t.exp < now || !db.users[t.user]) delete db.tokens[tok];
+  }
+  // 2) Bestellungen: unbezahlte nach 24 h, eingelöste nach 30 Tagen entfernen.
+  //    (Eine gelöschte Bestellung kann nicht erneut eingelöst werden — der
+  //    Capture-Handler bricht bei unbekannter Order-ID ab, kein Doppel-Grant.)
+  for (const [oid, o] of Object.entries(db.shopOrders)) {
+    if (!db.users[o.user]) {
+      delete db.shopOrders[oid];
+    } else if (o.status !== "GRANTED" && now - (o.created || 0) > STALE_ORDER_MS) {
+      delete db.shopOrders[oid];
+    } else if (
+      o.status === "GRANTED" &&
+      now - (o.grantedAt || o.created || 0) > OLD_GRANTED_MS
+    ) {
+      delete db.shopOrders[oid];
+    }
+  }
+  // 3) Verwaiste Anfragen (Allianz/Freunde), deren Bezug nicht mehr existiert.
+  db.allianceRequests = db.allianceRequests.filter(
+    (r) => db.alliances[r.allianceId] && db.users[r.user],
+  );
+  db.friendRequests = db.friendRequests.filter(
+    (r) => db.users[r.from] && db.users[r.to],
+  );
+  // 4) Meldungen zu nicht mehr existierenden Nachrichten entfernen.
+  if (Array.isArray(db.chatReports)) {
+    const liveMsgIds = new Set(db.chat.map((m) => m.id));
+    db.chatReports = db.chatReports.filter((r) => liveMsgIds.has(r.msgId));
+  }
 }
 
 // ---------------- Dorf & Welt ----------------
@@ -405,7 +479,9 @@ function canAfford(v, cost) {
   return RES.every((r) => v.res[r] >= cost[r]);
 }
 function pay(v, cost) {
-  for (const r of RES) v.res[r] -= cost[r];
+  // max(0, …) fängt winzige Fließkomma-Unterschreitungen ab, damit ein
+  // Rohstoff nie knapp unter null rutscht (Anzeige/Prüfungen bleiben konsistent).
+  for (const r of RES) v.res[r] = Math.max(0, v.res[r] - cost[r]);
 }
 function refund(v, cost) {
   const cap = storageCap(v.buildings.lager);
@@ -598,6 +674,12 @@ export function attack(user, x, y, unitCounts) {
     from: v.id,
     to: target.id,
     units,
+  });
+  // Verteidiger per Push warnen (No-Op, solange kein APNs konfiguriert ist).
+  sendToUser(defender, {
+    title: "⚔️ Angriff im Anmarsch!",
+    body: `${user.name} greift ${target.name} an.`,
+    data: { type: "attack", x: target.x, y: target.y },
   });
   return { arrival: at };
 }
@@ -1114,17 +1196,65 @@ function advanceConquest(av, dv, defenderUser, now) {
 // damit sein Konto nie ohne Dorf dasteht.
 function conquerVillage(av, dv, defenderUser, now) {
   const attacker = db.users[av.owner];
+  const defenderKey = defenderUser.name.toLowerCase();
+
+  // Fremde Verstärkung, die hier stationiert war, marschiert nach Hause zurück —
+  // sie soll nicht plötzlich den neuen Besitzer verteidigen.
+  for (const [fromId, stack] of Object.entries(dv.garrison || {})) {
+    const home = db.villages[fromId];
+    if (home && stack.units && Object.keys(stack.units).length) {
+      const dist = Math.hypot(dv.x - home.x, dv.y - home.y);
+      db.events.push({
+        id: nextId("e"),
+        type: "return",
+        at: now + travelTimeMs(dist, stack.units),
+        start: now,
+        from: dv.id,
+        to: home.id,
+        units: stack.units,
+      });
+    }
+  }
+  dv.garrison = {};
+
   dv.owner = attacker.name.toLowerCase();
   dv.conquest = null;
   dv.protectedUntil = now + PROTECTION_MS; // Frisch erobertes Dorf erhält 24 h Schutz
+
+  // Neues Heimatdorf des bisherigen Besitzers bestimmen (dv gehört jetzt dem
+  // Angreifer, ist also nicht mehr in ownedVillages enthalten).
+  let newHomeId = defenderUser.villageId;
   if (defenderUser.villageId === dv.id) {
     const remaining = ownedVillages(defenderUser);
-    if (remaining.length) {
-      defenderUser.villageId = remaining[0].id;
-    } else {
-      const fresh = createVillage(defenderUser.name);
-      defenderUser.villageId = fresh.id;
-    }
+    newHomeId = remaining.length
+      ? remaining[0].id
+      : createVillage(defenderUser.name).id;
+    defenderUser.villageId = newHomeId;
+  }
+
+  // In Transit befindliche Truppen/Ladungen des Vorbesitzers umleiten, damit sie
+  // nicht im nun feindlichen Dorf landen (sonst würde er sie dem Eroberer schenken).
+  for (const ev of db.events) {
+    if (ev.type === "return" && ev.to === dv.id) ev.to = newHomeId;
+    else if (
+      (ev.type === "attack" ||
+        ev.type === "scout" ||
+        ev.type === "explore" ||
+        ev.type === "reinforce") &&
+      ev.from === dv.id
+    )
+      ev.from = newHomeId;
+    else if (
+      (ev.type === "gather" || ev.type === "gatherReturn") &&
+      ev.village === dv.id
+    )
+      ev.village = newHomeId;
+    else if (
+      ev.type === "transport" &&
+      ev.to === dv.id &&
+      ev.owner === defenderKey
+    )
+      ev.to = newHomeId;
   }
 }
 
@@ -2035,22 +2165,154 @@ export function allianceList(user) {
 // Ein globaler Kanal für alle Spieler. Nachrichten liegen in db.chat und
 // werden auf MAX_CHAT begrenzt (älteste fallen raus).
 
+// Wortfilter: maskiert bekannte Schimpfwörter (auch als Wortbestandteil).
+const BADWORD_RE = BADWORDS.length
+  ? new RegExp(
+      BADWORDS.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"),
+      "gi",
+    )
+  : null;
+function maskProfanity(text) {
+  if (!BADWORD_RE) return text;
+  return text.replace(BADWORD_RE, (m) => "*".repeat(m.length));
+}
+
+// Blockierliste eines Nutzers (nameLower[]). Blockierte Absender sieht er nicht.
+function blockedSet(user) {
+  if (!Array.isArray(user.blocked)) user.blocked = [];
+  return user.blocked;
+}
+
 export function postChat(user, text) {
   text = String(text || "")
     .replace(/\s+/g, " ")
     .trim();
   if (!text) fail("Leere Nachricht.");
   if (text.length > 240) fail("Nachricht: höchstens 240 Zeichen.");
-  const msg = { id: nextId("c"), from: user.name, text, time: Date.now() };
+  const msg = {
+    id: nextId("c"),
+    from: user.name,
+    fromKey: user.name.toLowerCase(),
+    text: maskProfanity(text),
+    time: Date.now(),
+  };
   db.chat.push(msg);
-  if (db.chat.length > MAX_CHAT) db.chat.splice(0, db.chat.length - MAX_CHAT);
+  if (db.chat.length > MAX_CHAT) {
+    const removed = db.chat.splice(0, db.chat.length - MAX_CHAT);
+    // Meldungen zu entfernten Nachrichten mit aufräumen.
+    const goneIds = new Set(removed.map((m) => m.id));
+    db.chatReports = db.chatReports.filter((r) => !goneIds.has(r.msgId));
+  }
   return msg;
 }
 
+// Sichtbare Nachrichten für einen Betrachter: ausgeblendete (gemeldet/gelöscht)
+// und Nachrichten blockierter Absender werden herausgefiltert. Admins sehen alles
+// (inkl. Meldungszähler), um moderieren zu können.
 export function getChat(user) {
-  // Öffnen des Chats markiert alle bisherigen Nachrichten als gelesen.
   if (user) user.lastChatSeen = Date.now();
-  return { messages: db.chat, serverTime: Date.now() };
+  const admin = isAdmin(user);
+  const blocked = user ? new Set(blockedSet(user)) : new Set();
+  const reportCount = {};
+  if (admin)
+    for (const r of db.chatReports)
+      reportCount[r.msgId] = (reportCount[r.msgId] || 0) + 1;
+  const myKey = user ? user.name.toLowerCase() : null;
+  const fromKeyOf = (m) => m.fromKey || String(m.from).toLowerCase();
+  const messages = db.chat
+    .filter((m) => admin || (!m.hidden && !blocked.has(fromKeyOf(m))))
+    .map((m) => ({
+      id: m.id,
+      from: m.from,
+      text: m.text,
+      time: m.time,
+      mine: myKey ? fromKeyOf(m) === myKey : false,
+      hidden: admin ? !!m.hidden : undefined,
+      reports: admin ? reportCount[m.id] || 0 : undefined,
+    }));
+  return {
+    messages,
+    serverTime: Date.now(),
+    isAdmin: admin,
+    blocked: user ? [...blocked] : [],
+  };
+}
+
+// Nachricht melden. Mehrere unabhängige Meldungen blenden sie automatisch aus.
+export function reportChat(user, msgId) {
+  const key = user.name.toLowerCase();
+  const msg = db.chat.find((m) => m.id === msgId);
+  if (!msg) fail("Nachricht nicht gefunden.");
+  if ((msg.fromKey || String(msg.from).toLowerCase()) === key)
+    fail("Du kannst deine eigene Nachricht nicht melden.");
+  if (db.chatReports.some((r) => r.msgId === msgId && r.by === key))
+    fail("Du hast diese Nachricht bereits gemeldet.");
+  db.chatReports.push({
+    id: nextId("cr"),
+    msgId,
+    by: key,
+    time: Date.now(),
+  });
+  const count = db.chatReports.filter((r) => r.msgId === msgId).length;
+  if (count >= CHAT_REPORT_HIDE_THRESHOLD) msg.hidden = true;
+  return { reported: true, hidden: !!msg.hidden };
+}
+
+export function blockChatUser(user, name) {
+  const key = String(name || "")
+    .trim()
+    .toLowerCase();
+  if (!key) fail("Kein Spieler angegeben.");
+  if (key === user.name.toLowerCase()) fail("Du kannst dich nicht selbst blockieren.");
+  const list = blockedSet(user);
+  if (!list.includes(key)) list.push(key);
+  return getChat(user);
+}
+
+export function unblockChatUser(user, name) {
+  const key = String(name || "")
+    .trim()
+    .toLowerCase();
+  const list = blockedSet(user);
+  user.blocked = list.filter((b) => b !== key);
+  return getChat(user);
+}
+
+// --- Admin/Moderation (nur für Konten in VOX_ADMINS) ---
+
+export function adminDeleteChat(user, msgId) {
+  if (!isAdmin(user)) fail("Nur Moderatoren.");
+  const msg = db.chat.find((m) => m.id === msgId);
+  if (!msg) fail("Nachricht nicht gefunden.");
+  msg.hidden = true;
+  msg.text = "[von Moderation entfernt]";
+  return { deleted: true };
+}
+
+export function adminBanUser(user, name) {
+  if (!isAdmin(user)) fail("Nur Moderatoren.");
+  const key = String(name || "")
+    .trim()
+    .toLowerCase();
+  const target = db.users[key] || fail("Spieler nicht gefunden.");
+  if (isAdmin(target)) fail("Ein Moderator kann nicht gesperrt werden.");
+  target.banned = true;
+  // Alle Sessions des gesperrten Kontos beenden und dessen Chat ausblenden.
+  for (const [tok, t] of Object.entries(db.tokens))
+    if (t.user === key) delete db.tokens[tok];
+  for (const m of db.chat)
+    if ((m.fromKey || String(m.from).toLowerCase()) === key) m.hidden = true;
+  return { banned: target.name };
+}
+
+export function adminUnbanUser(user, name) {
+  if (!isAdmin(user)) fail("Nur Moderatoren.");
+  const key = String(name || "")
+    .trim()
+    .toLowerCase();
+  const target = db.users[key] || fail("Spieler nicht gefunden.");
+  target.banned = false;
+  return { unbanned: target.name };
 }
 
 // ---------------- Freunde & Freundschaftsanfragen ----------------
@@ -2646,11 +2908,13 @@ export function getState(user) {
       // Eigene Truppen, die in fremden Dörfern stationiert sind (mit Rückruf-Handle).
       stationed: (() => {
         const key = user.name.toLowerCase();
+        // Eigene Dorf-IDs einmal als Set — statt ownedVillages() je Garnisons-Stack.
+        const ownedIds = new Set(ownedVillages(user).map((ov) => ov.id));
         const out = [];
         for (const tv of Object.values(db.villages)) {
           for (const [fromId, stack] of Object.entries(tv.garrison || {})) {
             if (stack.owner !== key) continue;
-            if (!ownedVillages(user).some((ov) => ov.id === fromId)) continue;
+            if (!ownedIds.has(fromId)) continue;
             if (!Object.keys(stack.units).length) continue;
             out.push({
               targetId: tv.id,
@@ -2697,10 +2961,20 @@ export function getState(user) {
     // Fremde Angebote am Markt (die eigenen zählen nicht als Störer).
     marketOffers: db.market.filter((o) => o.seller !== user.name.toLowerCase())
       .length,
-    // Neue Chat-Nachrichten von anderen seit dem letzten Öffnen des Chats.
-    unreadChat: db.chat.filter(
-      (m) => m.time > (user.lastChatSeen || 0) && m.from !== user.name,
-    ).length,
+    // Neue Chat-Nachrichten von anderen seit dem letzten Öffnen des Chats
+    // (versteckte und von diesem Spieler blockierte Absender zählen nicht mit).
+    unreadChat: (() => {
+      const blocked = new Set(
+        Array.isArray(user.blocked) ? user.blocked : [],
+      );
+      return db.chat.filter(
+        (m) =>
+          m.time > (user.lastChatSeen || 0) &&
+          m.from !== user.name &&
+          !m.hidden &&
+          !blocked.has(m.fromKey || String(m.from).toLowerCase()),
+      ).length;
+    })(),
     quests: questSummary(user, v),
   };
 }
@@ -2739,21 +3013,148 @@ export function renameVillage(user, name) {
   return getProfile(user);
 }
 
-export function changePassword(user, oldPass, newPass) {
-  const oldHash = crypto
-    .scryptSync(String(oldPass || ""), user.salt, 32)
-    .toString("hex");
-  if (!crypto.timingSafeEqual(Buffer.from(oldHash), Buffer.from(user.hash)))
+export async function changePassword(user, oldPass, newPass) {
+  const oldHash = await hashPassword(oldPass || "", user.salt);
+  if (!passwordMatches(oldHash, user.hash))
     fail("Aktuelles Passwort ist falsch.");
   if (String(newPass || "").length < 4)
     fail("Neues Passwort: mindestens 4 Zeichen.");
   const salt = crypto.randomBytes(16).toString("hex");
   user.salt = salt;
-  user.hash = crypto.scryptSync(String(newPass), salt, 32).toString("hex");
+  user.hash = await hashPassword(newPass, salt);
   // Alle bestehenden Sessions dieses Kontos invalidieren
   for (const [tok, t] of Object.entries(db.tokens)) {
     if (t.user === user.name.toLowerCase()) delete db.tokens[tok];
   }
+}
+
+// ---------------- Konto: Export & Löschung (DSGVO / App-Store 5.1.1) ----------------
+
+// Alle personenbezogenen Daten des Kontos als JSON (Recht auf Datenübertragbarkeit,
+// DSGVO Art. 20). Der Client bietet das Ergebnis als Download an.
+export function exportData(user) {
+  const key = user.name.toLowerCase();
+  const alliance = user.allianceId ? db.alliances[user.allianceId] : null;
+  return {
+    exportedAt: new Date().toISOString(),
+    account: {
+      name: user.name,
+      created: user.created,
+      lastSeen: user.lastSeen,
+      xp: user.xp || 0,
+      level: levelForXp(user.xp || 0).level,
+      alliance: alliance ? { tag: alliance.tag, name: alliance.name } : null,
+      stats: user.stats || {},
+    },
+    villages: ownedVillages(user).map((v) => {
+      touchVillage(v);
+      return {
+        id: v.id,
+        name: v.name,
+        x: v.x,
+        y: v.y,
+        buildings: v.buildings,
+        units: v.units,
+        res: resSnapshot(v),
+        points: villagePoints(v),
+      };
+    }),
+    reports: user.reports || [],
+    purchases: user.purchases || [],
+    friends: db.friends[key] || [],
+    questsClaimed: user.questsClaimed || [],
+  };
+}
+
+// Konto und alle zugehörigen Daten unwiderruflich löschen (DSGVO Art. 17,
+// „Recht auf Vergessenwerden"; Apple verlangt Löschung direkt in der App).
+// Erfordert das aktuelle Passwort als Bestätigung.
+export async function deleteAccount(user, pass) {
+  const key = user.name.toLowerCase();
+  const hash = await hashPassword(pass || "", user.salt);
+  if (!passwordMatches(hash, user.hash)) fail("Passwort ist falsch.");
+
+  // Aus der Allianz austreten (löst ggf. Führungswechsel/Auflösung aus).
+  if (user.allianceId) {
+    try {
+      allianceLeave(user);
+    } catch {
+      /* falls die Allianz schon weg ist – egal */
+    }
+  }
+
+  // Eigene Dörfer aus Welt-Gitter und Dorfliste entfernen.
+  const ownedIds = new Set();
+  for (const v of ownedVillages(user)) {
+    ownedIds.add(v.id);
+    delete db.world[`${v.x},${v.y}`];
+    delete db.villages[v.id];
+  }
+
+  // Eigene Garnison, die in fremden Dörfern stationiert ist, auflösen.
+  for (const tv of Object.values(db.villages)) {
+    if (!tv.garrison) continue;
+    for (const fromId of Object.keys(tv.garrison)) {
+      if (tv.garrison[fromId].owner === key || ownedIds.has(fromId))
+        delete tv.garrison[fromId];
+    }
+  }
+
+  // Events verwerfen, die ein inzwischen gelöschtes Dorf betreffen.
+  db.events = db.events.filter((e) => {
+    for (const id of [e.from, e.to, e.village]) {
+      if (id && ownedIds.has(id)) return false;
+    }
+    return true;
+  });
+
+  // Marktangebote, Chat, Freunde, Anfragen, Sessions, Bestellungen.
+  db.market = db.market.filter((o) => o.seller !== key);
+  db.chat = db.chat.filter(
+    (m) => (m.fromKey || String(m.from).toLowerCase()) !== key,
+  );
+  const liveMsgIds = new Set(db.chat.map((m) => m.id));
+  db.chatReports = db.chatReports.filter(
+    (r) => r.by !== key && liveMsgIds.has(r.msgId),
+  );
+  db.allianceRequests = db.allianceRequests.filter((r) => r.user !== key);
+  db.friendRequests = db.friendRequests.filter(
+    (r) => r.from !== key && r.to !== key,
+  );
+  for (const k of Object.keys(db.friends)) {
+    db.friends[k] = (db.friends[k] || []).filter((f) => f !== key);
+    if (!db.friends[k].length) delete db.friends[k];
+  }
+  delete db.friends[key];
+  for (const [tok, t] of Object.entries(db.tokens))
+    if (t.user === key) delete db.tokens[tok];
+  // Hinweis Betreiber: Zahlungs-/Rechnungsdaten unterliegen ggf. gesetzlicher
+  // Aufbewahrungspflicht — vor produktivem Einsatz klären (siehe APPSTORE.md).
+  for (const [oid, o] of Object.entries(db.shopOrders))
+    if (o.user === key) delete db.shopOrders[oid];
+
+  delete db.users[key];
+}
+
+// ---------------- Push-Benachrichtigungen ----------------
+// Die native App (Capacitor) meldet hier ihr Geräte-Token an, damit der Server
+// den Spieler bei Angriffen etc. benachrichtigen kann. Siehe server/push.js + CAPACITOR.md.
+export function registerPushToken(user, token, platform) {
+  token = String(token || "").trim();
+  if (!token) fail("Kein Push-Token übermittelt.");
+  if (!Array.isArray(user.pushTokens)) user.pushTokens = [];
+  const now = Date.now();
+  const existing = user.pushTokens.find((t) => t.token === token);
+  if (existing) {
+    existing.at = now;
+    if (platform) existing.platform = platform;
+  } else {
+    user.pushTokens.push({ token, platform: platform || "ios", at: now });
+  }
+  // Nur die letzten Geräte behalten (ein Konto auf mehreren Geräten ist ok).
+  if (user.pushTokens.length > 10)
+    user.pushTokens = user.pushTokens.slice(-10);
+  return { registered: true };
 }
 
 // ---------------- Item-Shop (Echtgeld / PayPal) ----------------
@@ -2850,27 +3251,42 @@ export async function shopCaptureOrder(user, orderId) {
       state: getState(user),
     };
   }
+  // Läuft bereits ein Capture für dieselbe Order (z. B. Doppelklick / zwei Tabs)?
+  // Der Status wird SYNCHRON auf CAPTURING gesetzt, bevor wir auf PayPal warten —
+  // ein zweiter, gleichzeitiger Aufruf sieht CAPTURING und bricht ab. So kann der
+  // Artikel selbst bei parallelen Requests nur genau einmal gutgeschrieben werden.
+  if (rec.status === "CAPTURING")
+    fail("Diese Bestellung wird gerade verarbeitet. Bitte kurz warten.");
+  rec.status = "CAPTURING";
 
-  if (rec.test) {
-    rec.capture = { status: "COMPLETED", test: true };
-  } else {
-    const cap = await ppCaptureOrder(orderId);
-    if (cap?.status !== "COMPLETED") fail("Zahlung wurde nicht abgeschlossen.");
-    // Gezahlten Betrag serverseitig gegen den Artikelpreis prüfen.
-    const paid = cap?.purchase_units?.[0]?.payments?.captures?.[0]?.amount;
-    if (
-      !paid ||
-      paid.currency_code !== SHOP_CURRENCY ||
-      Number(paid.value) + 1e-6 < item.price
-    )
-      fail("Der gezahlte Betrag stimmt nicht mit dem Artikelpreis überein.");
-    rec.capture = {
-      status: cap.status,
-      captureId: cap?.purchase_units?.[0]?.payments?.captures?.[0]?.id || null,
-    };
+  let effect;
+  try {
+    if (rec.test) {
+      rec.capture = { status: "COMPLETED", test: true };
+    } else {
+      const cap = await ppCaptureOrder(orderId);
+      if (cap?.status !== "COMPLETED")
+        fail("Zahlung wurde nicht abgeschlossen.");
+      // Gezahlten Betrag serverseitig gegen den Artikelpreis prüfen.
+      const paid = cap?.purchase_units?.[0]?.payments?.captures?.[0]?.amount;
+      if (
+        !paid ||
+        paid.currency_code !== SHOP_CURRENCY ||
+        Number(paid.value) + 1e-6 < item.price
+      )
+        fail("Der gezahlte Betrag stimmt nicht mit dem Artikelpreis überein.");
+      rec.capture = {
+        status: cap.status,
+        captureId:
+          cap?.purchase_units?.[0]?.payments?.captures?.[0]?.id || null,
+      };
+    }
+    effect = grantShopItem(user, rec.item);
+  } catch (e) {
+    // Fehlgeschlagen → zurück auf CREATED, damit der Käufer es erneut versuchen kann.
+    rec.status = "CREATED";
+    throw e;
   }
-
-  const effect = grantShopItem(user, rec.item);
   rec.status = "GRANTED";
   rec.grantedAt = Date.now();
 

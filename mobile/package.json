@@ -1,0 +1,20 @@
+{
+  "name": "voxempire-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Native App-Hülle (Capacitor) für VOXEMPIRE — iOS/Android. Lädt den Web-Client und ergänzt Push-Benachrichtigungen.",
+  "scripts": {
+    "sync": "cap sync",
+    "open:ios": "cap open ios",
+    "add:ios": "cap add ios"
+  },
+  "dependencies": {
+    "@capacitor/app": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/ios": "^6.0.0",
+    "@capacitor/push-notifications": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0"
+  }
+}
