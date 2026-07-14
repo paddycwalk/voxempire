@@ -423,23 +423,32 @@ function renderWorldMap(
       // eigenes Dorf wird zusätzlich mit "(Du)" markiert.
       const villName = esc(t.village || `${t.owner}s Dorf`);
       const ownerMark = own ? `${esc(t.owner)} (Du)` : esc(t.owner);
-      // Beschriftung mit weißem Kontur-Untergrund für Lesbarkeit auf jedem Terrain.
-      const lbl = (y, txt, size, weight, italic) =>
-        `<text x="${cx}" y="${y}" text-anchor="middle" font-size="${size}" font-family="Georgia,'Times New Roman',serif"${italic ? ' font-style="italic"' : ""} fill="#fff" stroke="#fff" stroke-width="2.6" stroke-linejoin="round" opacity="0.7">${txt}</text>
-         <text x="${cx}" y="${y}" text-anchor="middle" font-size="${size}" font-family="Georgia,'Times New Roman',serif"${italic ? ' font-style="italic"' : ""} fill="${col}" font-weight="${weight}">${txt}</text>`;
+      // Beschriftung auf abgesetzter, dunkler Plakette — auf jedem Terrain gut
+      // lesbar. Farbe der Schrift kennzeichnet eigen (Gold) / Allianz (Blau) /
+      // fremd (helles Pergament).
+      const labelCol = own ? WM.gold : ally ? WM.blue : "#f4edd6";
+      const nameSize = 11.5,
+        ownSize = 9.5;
+      const plateW =
+        Math.max(villName.length * nameSize, ownerMark.length * ownSize) * 0.62 +
+        14;
+      const plateX = (cx - plateW / 2).toFixed(1);
+      const label = `
+        <rect x="${plateX}" y="${(cy + 18).toFixed(1)}" width="${plateW.toFixed(1)}" height="26" rx="7" fill="#11141b" fill-opacity="0.78" stroke="#000" stroke-opacity="0.45" stroke-width="0.6"/>
+        <text x="${cx}" y="${(cy + 30).toFixed(1)}" text-anchor="middle" font-size="${nameSize}" font-family="Georgia,'Times New Roman',serif" font-style="italic" font-weight="700" fill="${labelCol}">${villName}</text>
+        <text x="${cx}" y="${(cy + 40).toFixed(1)}" text-anchor="middle" font-size="${ownSize}" font-family="Georgia,'Times New Roman',serif" font-weight="500" fill="${labelCol}" opacity="0.9">${ownerMark}</text>`;
       vills += `<g class="wm-village" onclick='selectTile(${JSON.stringify(t)})'>
         <rect class="wm-hit" x="${(cx - CELL / 2).toFixed(1)}" y="${(cy - CELL / 2).toFixed(1)}" width="${CELL}" height="${CELL}" rx="4" fill="transparent"/>
         ${ring}${glyph}${shield}${conq}
-        <g class="wm-label">
-          ${lbl((cy + 27).toFixed(1), villName, 10.5, 600, true)}
-          ${lbl((cy + 38).toFixed(1), ownerMark, 8.5, 500, false)}
-        </g>
+        <g class="wm-label">${label}</g>
       </g>`;
     }
   }
 
   // Rohstoffvorkommen (klickbare Sammelplätze) über dem Terrain, unter den Bewegungen
   const NODE_COL = { holz: "#4d7a2e", stein: "#7d848f", eisen: "#c9962f" };
+  // Hellere Schriftfarben für die Plaketten-Beschriftung (gut lesbar auf Dunkel).
+  const NODE_LABEL_COL = { holz: "#9ecb63", stein: "#c7cfda", eisen: "#e8c161" };
   const NODE_LABEL = { holz: "Wald", stein: "Steinbruch", eisen: "Eisenader" };
   let nodesLayer = "";
   for (const n of nodes || []) {
@@ -454,13 +463,15 @@ function renderWorldMap(
       ? `<circle cx="${cx}" cy="${cy}" r="24" fill="none" stroke="${col}" stroke-width="2.4"/>`
       : "";
     const label = NODE_LABEL[n.res] || "Vorkommen";
+    const labelCol = NODE_LABEL_COL[n.res] || "#e9e2cf";
+    const nodePlateW = label.length * 9.5 * 0.62 + 12;
     nodesLayer += `<g class="wm-node" onclick='selectNode(${JSON.stringify(n)})'>
       <rect class="wm-hit" x="${(cx - CELL / 2).toFixed(1)}" y="${(cy - CELL / 2).toFixed(1)}" width="${CELL}" height="${CELL}" rx="4" fill="transparent"/>
       ${ring}${wmResourceGlyph(cx, cy, n.res)}
       ${wmRichnessPips(cx, cy + 15, n.richness, col)}
       <g class="wm-label">
-        <text x="${cx}" y="${(cy + 28).toFixed(1)}" text-anchor="middle" font-size="9.5" font-family="Georgia,'Times New Roman',serif" font-style="italic" fill="#fff" stroke="#fff" stroke-width="2.4" stroke-linejoin="round" opacity="0.7">${label}</text>
-        <text x="${cx}" y="${(cy + 28).toFixed(1)}" text-anchor="middle" font-size="9.5" font-family="Georgia,'Times New Roman',serif" font-style="italic" fill="${col}" font-weight="600">${label}</text>
+        <rect x="${(cx - nodePlateW / 2).toFixed(1)}" y="${(cy + 20).toFixed(1)}" width="${nodePlateW.toFixed(1)}" height="15" rx="6" fill="#11141b" fill-opacity="0.74" stroke="#000" stroke-opacity="0.4" stroke-width="0.6"/>
+        <text x="${cx}" y="${(cy + 30.5).toFixed(1)}" text-anchor="middle" font-size="9.5" font-family="Georgia,'Times New Roman',serif" font-style="italic" fill="${labelCol}" font-weight="600">${label}</text>
       </g>
     </g>`;
   }

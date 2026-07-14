@@ -1000,9 +1000,7 @@ function movementsHtml() {
     if (m.type === "transport") {
       const load = costHtml(m.res || {});
       const dest =
-        m.dir === "in"
-          ? `von ${esc(m.target)}`
-          : `nach ${esc(m.target)}`;
+        m.dir === "in" ? `von ${esc(m.target)}` : `nach ${esc(m.target)}`;
       outgoing.push({
         at: m.at,
         art: "🛒 Transport",
@@ -1230,16 +1228,28 @@ function unitPresetBtns(inputId, max) {
 // stat="off" hebt die Angriffswerte hervor, sonst die Verteidigung (Wachen/Verstärkung).
 function unitPickerCard(key, def, max, inputId, oninput = "", stat = "def") {
   const empty = max <= 0 ? " is-empty" : "";
-  const stats =
+  const chips =
     stat === "off"
-      ? `⚔️${def.off} · 🛡️${def.def} · 🐎${def.speed} · 🎒${def.carry}`
-      : `🛡️${def.def} · ⚔️${def.off} · 🐎${def.speed}`;
+      ? [
+          ["⚔️", def.off],
+          ["🛡️", def.def],
+          ["🐎", def.speed],
+          ["🎒", def.carry],
+        ]
+      : [
+          ["🛡️", def.def],
+          ["⚔️", def.off],
+          ["🐎", def.speed],
+        ];
+  const stats = chips
+    .map(([icon, val]) => `<span class="pick-stat">${icon} ${val}</span>`)
+    .join("");
   return `
     <label class="pick-card${empty}" for="${inputId}" title="${esc(def.name)}">
       <span class="pick-portrait">${UNIT_ICONS[key] || ""}</span>
       <span class="pick-info">
         <b>${esc(def.name)}</b>
-        <small class="pick-stats">${stats}</small>
+        <span class="pick-stats">${stats}</span>
         <small class="pick-avail">verfügbar: <b>${fmtNum(max)}</b></small>
       </span>
       <input class="pick-input" type="number" min="0" max="${max}" value="0" id="${inputId}" ${max ? "" : "disabled"}${oninput ? ` oninput="${oninput}"` : ""}>
@@ -3246,10 +3256,12 @@ renderers.shop = async () => {
     .map(
       (it) => `
     <div class="card shop-item">
-      <div class="shop-icon">${it.icon || "💎"}</div>
-      <div class="shop-body">
-        <h3>${esc(it.name)}</h3>
-        <p class="muted">${esc(it.desc)}</p>
+      <div class="shop-head">
+        <div class="shop-icon">${it.icon || "💎"}</div>
+        <div class="shop-body">
+          <h3>${esc(it.name)}</h3>
+          <p class="muted">${esc(it.desc)}</p>
+        </div>
       </div>
       <div class="shop-buy">
         <div class="shop-price">${it.price.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</div>
