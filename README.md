@@ -189,5 +189,3 @@ Neue Features und Änderungen werden hier festgehalten (neueste zuerst).
 - **Allianz-interner Handel**: Marktangebote lassen sich „nur für die Allianz"
   einstellen; die Ware reist per **Handelskarre** mit Reisezeit ans Ziel.
 - **Allianz-Limit**: Maximal **10 Mitglieder** pro Allianz (mit „x/10"-Anzeige).
-
-## Test
