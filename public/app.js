@@ -596,6 +596,13 @@ function renderHeader() {
     cBadge.textContent = unread;
   }
 
+  const clBadge = $("#changelogBadge");
+  if (clBadge) {
+    const unseen = unseenChangelogCount();
+    clBadge.classList.toggle("hidden", unseen === 0);
+    clBadge.textContent = unseen;
+  }
+
   const q = state.quests;
   const lvlChip = $("#levelChip");
   if (lvlChip && q) {
@@ -4056,9 +4063,40 @@ const CHANGE_TYPES = {
   improvement: { icon: "🔧", label: "Verbessert", cls: "cl-improve" },
 };
 
+// Bis zu welcher Version hat der Spieler den Changelog zuletzt gesehen?
+const CHANGELOG_SEEN_KEY = "vox.changelogSeen";
+
+// Anzahl der Changelog-Einträge, die seit dem letzten Öffnen neu sind.
+// CHANGELOG ist absteigend sortiert (neueste zuerst), daher zählen wir die
+// Einträge oberhalb der zuletzt gesehenen Version.
+function unseenChangelogCount() {
+  let seen = null;
+  try {
+    seen = localStorage.getItem(CHANGELOG_SEEN_KEY);
+  } catch {
+    /* localStorage evtl. gesperrt */
+  }
+  if (!seen) return CHANGELOG.length;
+  const idx = CHANGELOG.findIndex((rel) => rel.version === seen);
+  return idx < 0 ? CHANGELOG.length : idx;
+}
+
+// Changelog als gelesen markieren (neueste Version merken) und Badge ausblenden.
+function markChangelogSeen() {
+  if (!CHANGELOG.length) return;
+  try {
+    localStorage.setItem(CHANGELOG_SEEN_KEY, CHANGELOG[0].version);
+  } catch {
+    /* localStorage evtl. gesperrt */
+  }
+  const clBadge = $("#changelogBadge");
+  if (clBadge) clBadge.classList.add("hidden");
+}
+
 renderers.changelog = () => {
   const el = $("#tab-changelog");
   if (!el) return;
+  markChangelogSeen();
   const releases = CHANGELOG.map((rel, i) => {
     const items = rel.changes
       .map((c) => {
