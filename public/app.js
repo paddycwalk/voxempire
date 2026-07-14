@@ -90,9 +90,9 @@ const esc = (s) =>
   String(s).replace(
     /[&<>"']/g,
     (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[
         c
-      ],
+      ])
   );
 
 const RES_NAMES = { holz: "Holz", stein: "Stein", eisen: "Eisen" };
@@ -112,7 +112,9 @@ function costHtml(cost, res) {
   return Object.entries(cost)
     .map(
       ([r, n]) =>
-        `<span class="${res && res[r] < n ? "no" : ""}" title="${RES_NAMES[r]}">${icons[r]} ${fmtNum(n)}</span>`,
+        `<span class="${res && res[r] < n ? "no" : ""}" title="${
+          RES_NAMES[r]
+        }">${icons[r]} ${fmtNum(n)}</span>`
     )
     .join(" ");
 }
@@ -175,8 +177,12 @@ function notify({
   const el = document.createElement("div");
   el.className = `notif n-${type}`;
   el.innerHTML = `
-    <div class="n-icon"><span class="n-ring"></span><span class="n-glyph">${NOTIFY_ICONS[type] || NOTIFY_ICONS.info}</span></div>
-    <div class="n-text"><b>${esc(title)}</b>${body ? `<span>${body}</span>` : ""}</div>
+    <div class="n-icon"><span class="n-ring"></span><span class="n-glyph">${
+      NOTIFY_ICONS[type] || NOTIFY_ICONS.info
+    }</span></div>
+    <div class="n-text"><b>${esc(title)}</b>${
+    body ? `<span>${body}</span>` : ""
+  }</div>
     <button class="n-close" title="Schließen">✕</button>
     <i class="n-progress" style="animation-duration:${ttl}ms"></i>`;
   if (celebrate ?? NOTIFY_CELEBRATE.has(type)) spawnConfetti(el);
@@ -218,14 +224,16 @@ function detectCompletions(prev, next) {
 
   // Fertige Bauaufträge
   const nq = new Set(
-    next.village.queue.map((q) => key(q.b, q.toLevel, q.done)),
+    next.village.queue.map((q) => key(q.b, q.toLevel, q.done))
   );
   for (const q of prev.village.queue) {
     if (q.done <= now && !nq.has(key(q.b, q.toLevel, q.done))) {
       notify({
         type: "build",
         title: "Ausbau abgeschlossen",
-        body: `${meta.BUILDINGS[q.b].name} ist jetzt <b class="gold">Stufe ${q.toLevel}</b>.`,
+        body: `${meta.BUILDINGS[q.b].name} ist jetzt <b class="gold">Stufe ${
+          q.toLevel
+        }</b>.`,
         tab: "dorf",
       });
     }
@@ -233,14 +241,16 @@ function detectCompletions(prev, next) {
 
   // Fertige Ausbildung
   const ntq = new Set(
-    next.village.trainQueue.map((q) => key(q.unit, q.count, q.done)),
+    next.village.trainQueue.map((q) => key(q.unit, q.count, q.done))
   );
   for (const q of prev.village.trainQueue) {
     if (q.done <= now && !ntq.has(key(q.unit, q.count, q.done))) {
       notify({
         type: "train",
         title: "Ausbildung abgeschlossen",
-        body: `${q.count}× ${meta.UNITS[q.unit].name} ${q.count === 1 ? "steht" : "stehen"} bereit.`,
+        body: `${q.count}× ${meta.UNITS[q.unit].name} ${
+          q.count === 1 ? "steht" : "stehen"
+        } bereit.`,
         tab: "militaer",
       });
     }
@@ -248,7 +258,7 @@ function detectCompletions(prev, next) {
 
   // Zurückgekehrte Truppen (Angriffs-Einschlag selbst meldet der neue Bericht)
   const nret = new Set(
-    next.movements.outgoing.filter((m) => m.type === "return").map((m) => m.at),
+    next.movements.outgoing.filter((m) => m.type === "return").map((m) => m.at)
   );
   for (const m of prev.movements.outgoing) {
     if (m.type === "return" && m.at <= now && !nret.has(m.at)) {
@@ -268,7 +278,7 @@ function detectCompletions(prev, next) {
   const ngret = new Set(
     next.movements.outgoing
       .filter((m) => m.type === "gatherReturn")
-      .map((m) => m.at),
+      .map((m) => m.at)
   );
   for (const m of prev.movements.outgoing) {
     if (m.type === "gatherReturn" && m.at <= now && !ngret.has(m.at)) {
@@ -333,7 +343,7 @@ function detectCompletions(prev, next) {
 
   // Neue eingehende Angriffe
   const pinc = new Set(
-    prev.movements.incoming.map((m) => key(m.at, m.fromOwner)),
+    prev.movements.incoming.map((m) => key(m.at, m.fromOwner))
   );
   for (const m of next.movements.incoming) {
     if (!pinc.has(key(m.at, m.fromOwner))) {
@@ -469,13 +479,19 @@ function renderVillageSelect() {
   btn.title = `${active.name} (${active.x}|${active.y}) – Dorf wechseln`;
 
   // Menüinhalt nur neu aufbauen, wenn sich die Dörferliste geändert hat.
-  const sig = villages.map((vv) => `${vv.id}:${vv.active ? 1 : 0}`).join(",");
+  const sig = villages
+    .map((vv) => `${vv.id}:${vv.active ? 1 : 0}:${vv.main ? 1 : 0}`)
+    .join(",");
   if (menu.dataset.sig !== sig) {
     menu.dataset.sig = sig;
     menu.innerHTML = villages
       .map(
         (vv) =>
-          `<button type="button" class="vs-item${vv.active ? " active" : ""}" role="option" data-id="${vv.id}">🏰 ${esc(vv.name)} <small>(${vv.x}|${vv.y})</small></button>`,
+          `<button type="button" class="vs-item${
+            vv.active ? " active" : ""
+          }" role="option" data-id="${vv.id}">🏰 ${esc(vv.name)}${
+            vv.main ? ' <span class="vs-main" title="Hauptdorf">👑</span>' : ""
+          } <small>(${vv.x}|${vv.y})</small></button>`
       )
       .join("");
     menu.querySelectorAll(".vs-item").forEach((el) => {
@@ -542,7 +558,9 @@ function renderHeader() {
     resEl.textContent = `${v.residents.idle}/${v.residents.total}`;
     const lost = v.residents.lost || 0;
     resEl.title = lost
-      ? `${lost} Bewohner gefallen – wachsen im Rathaus nach (1 je ${fmtDur(v.residents.regenMs)})`
+      ? `${lost} Bewohner gefallen – wachsen im Rathaus nach (1 je ${fmtDur(
+          v.residents.regenMs
+        )})`
       : "Freie / verfügbare Bewohner";
     resEl.classList.toggle("res-wounded", lost > 0);
   }
@@ -591,14 +609,21 @@ function renderHeader() {
   const prot = $("#protectionBanner");
   if (v.protectedUntil > serverNow()) {
     prot.classList.remove("hidden");
-    prot.innerHTML = `🛡️ Anfängerschutz aktiv — du kannst nicht angegriffen werden. Endet in ${countdown(v.protectedUntil, { tag: "b" })} (oder mit deinem ersten Angriff).`;
+    prot.innerHTML = `🛡️ Anfängerschutz aktiv — du kannst nicht angegriffen werden. Endet in ${countdown(
+      v.protectedUntil,
+      { tag: "b" }
+    )} (oder mit deinem ersten Angriff).`;
   } else prot.classList.add("hidden");
 
   const inc = $("#incomingBanner");
   if (state.movements.incoming.length) {
     const next = [...state.movements.incoming].sort((a, b) => a.at - b.at)[0];
     inc.classList.remove("hidden");
-    inc.innerHTML = `⚠️ ${state.movements.incoming.length} Angriff(e) im Anmarsch! Nächster von ${esc(next.fromOwner)} in ${countdown(next.at, { tag: "b" })}`;
+    inc.innerHTML = `⚠️ ${
+      state.movements.incoming.length
+    } Angriff(e) im Anmarsch! Nächster von ${esc(
+      next.fromOwner
+    )} in ${countdown(next.at, { tag: "b" })}`;
   } else inc.classList.add("hidden");
 }
 
@@ -801,18 +826,26 @@ function buildingGridHtml() {
       const inProgress = v.queue.some((q) => q.b === key);
       let badge;
       if (b.locked) {
-        badge = `<span class="bld-lock">🔒 ${esc(b.reqText || "gesperrt")}</span>`;
+        badge = `<span class="bld-lock">🔒 ${esc(
+          b.reqText || "gesperrt"
+        )}</span>`;
       } else if (b.level > 0) {
         badge = `<span class="bld-lvl">Stufe ${b.level}</span>`;
       } else {
         badge = `<span class="bld-new">✦ Neu</span>`;
       }
       return `
-      <button type="button" class="bld-card${sel}${locked}" onclick="selectBuilding('${key}')" title="${esc(def.name)}">
+      <button type="button" class="bld-card${sel}${locked}" onclick="selectBuilding('${key}')" title="${esc(
+        def.name
+      )}">
         <span class="bld-ic">${BUILDING_ICONS[key] || "🏛️"}</span>
         <span class="bld-name">${esc(def.name)}</span>
         ${badge}
-        ${inProgress ? '<span class="bld-progress-dot" title="Ausbau läuft">🔨</span>' : ""}
+        ${
+          inProgress
+            ? '<span class="bld-progress-dot" title="Ausbau läuft">🔨</span>'
+            : ""
+        }
       </button>`;
     })
     .join("");
@@ -830,17 +863,21 @@ function buildingPanelHtml() {
   const afford =
     !maxed && Object.entries(b.nextCost).every(([r, n]) => liveRes(r) >= n);
   const live = Object.fromEntries(
-    ["holz", "stein", "eisen"].map((r) => [r, liveRes(r)]),
+    ["holz", "stein", "eisen"].map((r) => [r, liveRes(r)])
   );
 
   let action;
   if (q) {
-    action = `<div class="bp-progress"><span class="dot"></span>Ausbau auf Stufe ${q.toLevel} läuft — ${countdown(q.done)}</div>`;
+    action = `<div class="bp-progress"><span class="dot"></span>Ausbau auf Stufe ${
+      q.toLevel
+    } läuft — ${countdown(q.done)}</div>`;
   } else if (b.locked) {
     action = `
       <div class="bp-locked">
         <div class="bp-locked-head">🔒 Noch nicht verfügbar</div>
-        <p class="muted">Benötigt <b class="gold">${esc(b.reqText || "höheres Rathaus")}</b>, um dieses Gebäude zu bauen.</p>
+        <p class="muted">Benötigt <b class="gold">${esc(
+          b.reqText || "höheres Rathaus"
+        )}</b>, um dieses Gebäude zu bauen.</p>
       </div>`;
   } else if (maxed) {
     action = `<div class="bp-maxed">✦ Maximalstufe erreicht</div>`;
@@ -850,10 +887,18 @@ function buildingPanelHtml() {
     // laufenden Ausbauten.
     action = `
       <div class="bp-next">
-        <div class="bp-next-head"><span>Ausbau auf Stufe ${b.level + 1}</span><span class="duration">⏱ ${fmtDur(b.nextTime)}</span></div>
+        <div class="bp-next-head"><span>Ausbau auf Stufe ${
+          b.level + 1
+        }</span><span class="duration">⏱ ${fmtDur(b.nextTime)}</span></div>
         <div class="cost big">${costHtml(b.nextCost, live)}</div>
-        <button class="btn ${afford ? "primary" : ""} bp-build" ${afford ? "" : "disabled"} onclick="actionBuild('${key}')">
-          ${afford ? `🔨 Ausbauen · ⏱ ${fmtDur(b.nextTime)}` : "Nicht genug Rohstoffe"}
+        <button class="btn ${afford ? "primary" : ""} bp-build" ${
+      afford ? "" : "disabled"
+    } onclick="actionBuild('${key}')">
+          ${
+            afford
+              ? `🔨 Ausbauen · ⏱ ${fmtDur(b.nextTime)}`
+              : "Nicht genug Rohstoffe"
+          }
         </button>
       </div>`;
   }
@@ -863,7 +908,9 @@ function buildingPanelHtml() {
   if (b.demoRefund) {
     demo = `
       <div class="bp-demo">
-        <div class="bp-next-head"><span>Abreißen auf Stufe ${b.level - 1}</span><span class="muted">+50 % zurück</span></div>
+        <div class="bp-next-head"><span>Abreißen auf Stufe ${
+          b.level - 1
+        }</span><span class="muted">+50 % zurück</span></div>
         <div class="cost">${costHtml(b.demoRefund)}</div>
         <button class="btn danger bp-demolish" onclick="actionDemolish('${key}')">🧨 Abreißen</button>
       </div>`;
@@ -875,7 +922,9 @@ function buildingPanelHtml() {
     const nowVal = b.level > 0 && b.effectNow ? esc(b.effectNow) : "—";
     const nextVal =
       b.effectNext && !maxed
-        ? ` <span class="bp-effect-arrow">→</span> <b class="gold">${esc(b.effectNext)}</b>`
+        ? ` <span class="bp-effect-arrow">→</span> <b class="gold">${esc(
+            b.effectNext
+          )}</b>`
         : "";
     effect = `
       <div class="bp-effect">
@@ -889,7 +938,9 @@ function buildingPanelHtml() {
       <span class="bp-icon">${BUILDING_ICONS[key] || "🏛️"}</span>
       <div>
         <b>${esc(def.name)}</b>
-        <div class="bp-level">Stufe ${b.level}${b.level ? "" : " · noch nicht gebaut"}</div>
+        <div class="bp-level">Stufe ${b.level}${
+    b.level ? "" : " · noch nicht gebaut"
+  }</div>
       </div>
     </div>
     <p class="bp-desc">${def.desc}</p>
@@ -902,10 +953,16 @@ renderers.dorf = () => {
 
   $("#tab-dorf").innerHTML = `
     <div class="village-head">
-      <h2>${esc(v.name)} <small class="muted">(${v.x}|${v.y}) · ${fmtNum(v.points)} Punkte</small></h2>
+      <h2>${esc(v.name)} <small class="muted">(${v.x}|${v.y}) · ${fmtNum(
+    v.points
+  )} Punkte</small></h2>
     </div>
     <div class="village-layout">
-      <div class="village-scene-wrap">${renderVillageScene(state, meta, selectedBuilding)}</div>
+      <div class="village-scene-wrap">${renderVillageScene(
+        state,
+        meta,
+        selectedBuilding
+      )}</div>
       <aside class="village-side">
         <div class="card building-panel" id="buildingPanel">${buildingPanelHtml()}</div>
         <div class="card"><h3 class="card-title">🏗️ Bauschleife</h3><div id="buildQueue">${queueHtml()}</div></div>
@@ -934,7 +991,9 @@ function garrisonHtml() {
   if (!rows) return '<p class="muted">Keine Truppen im Dorf.</p>';
   const total = Object.values(v.units).reduce((s, u) => s + (u.count || 0), 0);
   return `<div class="garrison-grid">${rows}</div>
-    <div class="garrison-total">Gesamt: <b>${fmtNum(total)}</b> Einheiten · Versorgung ${fmtNum(v.pop)}/${fmtNum(v.popCap)}</div>`;
+    <div class="garrison-total">Gesamt: <b>${fmtNum(
+      total
+    )}</b> Einheiten · Versorgung ${fmtNum(v.pop)}/${fmtNum(v.popCap)}</div>`;
 }
 
 // Baut das HTML der Truppenbewegungen (ein- und ausgehend) — wird im Dorf- und Militär-Tab genutzt
@@ -956,7 +1015,9 @@ function movementsHtml() {
     outgoing.push({
       at: m.at,
       art: '<span class="red">⚠️ Angriff</span>',
-      count: `von ${esc(m.fromOwner)}<br><small class="muted">${esc(m.fromVillage)} (${m.x}|${m.y})</small>`,
+      count: `von ${esc(m.fromOwner)}<br><small class="muted">${esc(
+        m.fromVillage
+      )} (${m.x}|${m.y})</small>`,
       support: "",
       action: "",
     });
@@ -981,7 +1042,9 @@ function movementsHtml() {
         outgoing.push({
           at: homeAt,
           art: "👷 Sammeln",
-          count: `${m.workers}× Bewohner<br><small class="muted">→ ${esc(m.target)} (${m.x}|${m.y})</small>`,
+          count: `${m.workers}× Bewohner<br><small class="muted">→ ${esc(
+            m.target
+          )} (${m.x}|${m.y})</small>`,
           support,
           action: recall,
         });
@@ -989,7 +1052,13 @@ function movementsHtml() {
         returning.push({
           at: homeAt,
           art: "↩️ Rückkehr",
-          count: `Bewohner${m.yield ? `<br><small class="muted">+${fmtNum(m.yield)} ${resName}</small>` : ""}`,
+          count: `Bewohner${
+            m.yield
+              ? `<br><small class="muted">+${fmtNum(
+                  m.yield
+                )} ${resName}</small>`
+              : ""
+          }`,
           support,
           action: "",
         });
@@ -1022,8 +1091,8 @@ function movementsHtml() {
       m.type === "explore"
         ? `(${m.x}|${m.y})`
         : m.type === "return"
-          ? `von ${esc(m.target)}`
-          : `→ ${esc(m.target)} (${m.x}|${m.y})`;
+        ? `von ${esc(m.target)}`
+        : `→ ${esc(m.target)} (${m.x}|${m.y})`;
     const loot = m.loot
       ? `<br><small class="muted">Beute: ${costHtml(m.loot)}</small>`
       : "";
@@ -1046,7 +1115,9 @@ function movementsHtml() {
   const stationed = (state.village.stationed || []).map((s) => ({
     at: null,
     art: "🤝 Verstärkt",
-    count: `${esc(s.target)} (${s.x}|${s.y})<br><small class="muted">${esc(s.owner)} · ${unitList(s.units)}</small>`,
+    count: `${esc(s.target)} (${s.x}|${s.y})<br><small class="muted">${esc(
+      s.owner
+    )} · ${unitList(s.units)}</small>`,
     support: "",
     action: `<button class="btn small" onclick="recallReinforce('${s.targetId}','${s.fromId}')" title="Zurückbeordern">↩️</button>`,
   }));
@@ -1055,7 +1126,9 @@ function movementsHtml() {
   const present = (state.village.reinforcements || []).map((r) => ({
     at: null,
     art: "🛡️ Verstärkung",
-    count: `von ${esc(r.owner)}<br><small class="muted">${esc(r.fromVillage)} · ${unitList(r.units)}</small>`,
+    count: `von ${esc(r.owner)}<br><small class="muted">${esc(
+      r.fromVillage
+    )} · ${unitList(r.units)}</small>`,
     support: "",
     action: "",
   }));
@@ -1071,7 +1144,7 @@ function movementsHtml() {
           <td class="move-support">${i.support}</td>
           <td class="move-time">${i.at ? countdown(i.at) : ""}</td>
           <td class="move-action">${i.action}</td>
-        </tr>`,
+        </tr>`
       )
       .join("");
   const section = (title, items, sort = true) =>
@@ -1100,7 +1173,11 @@ function queueHtml() {
     ? v.queue
         .map(
           (q) =>
-            `<div class="queue-item"><span>${meta.BUILDINGS[q.b].name} → Stufe ${q.toLevel} <small class="muted">/ max ${meta.BUILDINGS[q.b].max}</small></span>${countdown(q.done)}</div>`,
+            `<div class="queue-item"><span>${
+              meta.BUILDINGS[q.b].name
+            } → Stufe ${q.toLevel} <small class="muted">/ max ${
+              meta.BUILDINGS[q.b].max
+            }</small></span>${countdown(q.done)}</div>`
         )
         .join("")
     : '<p class="muted">Keine laufenden Bauaufträge.</p>';
@@ -1156,7 +1233,9 @@ window.actionDemolish = async (key) => {
   const b = state.village.buildings[key];
   if (
     !confirm(
-      `${meta.BUILDINGS[key].name} von Stufe ${b.level} auf ${b.level - 1} abreißen? Du bekommst die Hälfte der ausgegebenen Rohstoffe zurück.`,
+      `${meta.BUILDINGS[key].name} von Stufe ${b.level} auf ${
+        b.level - 1
+      } abreißen? Du bekommst die Hälfte der ausgegebenen Rohstoffe zurück.`
     )
   )
     return;
@@ -1218,7 +1297,7 @@ function unitPresetBtns(inputId, max) {
   const nums = UNIT_PRESETS.filter((n) => n < max)
     .map(
       (n) =>
-        `<button type="button" class="btn small" onclick="setUnitCount('${inputId}',${n},${max})">${n}</button>`,
+        `<button type="button" class="btn small" onclick="setUnitCount('${inputId}',${n},${max})">${n}</button>`
     )
     .join("");
   return `<span class="pick-presets">${nums}<button type="button" class="btn small" onclick="setUnitCount('${inputId}',${max},${max})">Max</button></span>`;
@@ -1252,7 +1331,9 @@ function unitPickerCard(key, def, max, inputId, oninput = "", stat = "def") {
         <span class="pick-stats">${stats}</span>
         <small class="pick-avail">verfügbar: <b>${fmtNum(max)}</b></small>
       </span>
-      <input class="pick-input" type="number" min="0" max="${max}" value="0" id="${inputId}" ${max ? "" : "disabled"}${oninput ? ` oninput="${oninput}"` : ""}>
+      <input class="pick-input" type="number" min="0" max="${max}" value="0" id="${inputId}" ${
+    max ? "" : "disabled"
+  }${oninput ? ` oninput="${oninput}"` : ""}>
       ${unitPresetBtns(inputId, max)}
     </label>`;
 }
@@ -1265,7 +1346,9 @@ function trainSummaryHtml(key, val) {
   const n = Math.floor(Number(val));
   if (!Number.isFinite(n) || n < 1) {
     return `<span class="cost">${costHtml(def.cost, state.village.res)}</span>
-      <br><small class="muted">⏱ ${fmtDur(u.time)}/Einheit · Versorgung ${def.up}</small>`;
+      <br><small class="muted">⏱ ${fmtDur(u.time)}/Einheit · Versorgung ${
+      def.up
+    }</small>`;
   }
   const clamped = Math.min(500, n);
   const cost = {};
@@ -1274,7 +1357,12 @@ function trainSummaryHtml(key, val) {
   const free = state.village.popCap - state.village.pop;
   const supplyClass = supply > free ? "no" : "";
   return `<span class="cost">${costHtml(cost, state.village.res)}</span>
-    <br><small class="muted">⏱ ${fmtDur(u.time * clamped)} · <span class="${supplyClass}">Versorgung ${supply}</span> (frei ${Math.max(0, free)})</small>`;
+    <br><small class="muted">⏱ ${fmtDur(
+      u.time * clamped
+    )} · <span class="${supplyClass}">Versorgung ${supply}</span> (frei ${Math.max(
+    0,
+    free
+  )})</small>`;
 }
 
 renderers.militaer = () => {
@@ -1286,26 +1374,41 @@ renderers.militaer = () => {
       if (u.locked) {
         return `
       <tr class="unit-locked">
-        <td class="unit-cell"><span class="unit-portrait">${UNIT_ICONS[key] || ""}</span></td>
-        <td><b>${def.name}</b><br><small class="muted">Off ${def.off} · Def ${def.def} · Tempo ${def.speed} · trägt ${def.carry}</small></td>
+        <td class="unit-cell"><span class="unit-portrait">${
+          UNIT_ICONS[key] || ""
+        }</span></td>
+        <td><b>${def.name}</b><br><small class="muted">Off ${def.off} · Def ${
+          def.def
+        } · Tempo ${def.speed} · trägt ${def.carry}</small></td>
         <td class="num" data-label="Im Dorf">${fmtNum(u.count)}</td>
-        <td data-label="Kosten"><span class="cost">${costHtml(def.cost)}</span><br><small class="muted">Versorgung ${def.up}</small></td>
-        <td data-label="Ausbilden"><div class="unit-lockmsg">🔒 ${esc(u.reqText || "gesperrt")}</div></td>
+        <td data-label="Kosten"><span class="cost">${costHtml(
+          def.cost
+        )}</span><br><small class="muted">Versorgung ${def.up}</small></td>
+        <td data-label="Ausbilden"><div class="unit-lockmsg">🔒 ${esc(
+          u.reqText || "gesperrt"
+        )}</div></td>
       </tr>`;
       }
       const cnt = trainCounts[key] ?? "";
       const presetBtns =
         TRAIN_PRESETS.map(
           (n) =>
-            `<button type="button" class="btn small" onclick="pickTrainCount('${key}', ${n})">${n}</button>`,
+            `<button type="button" class="btn small" onclick="pickTrainCount('${key}', ${n})">${n}</button>`
         ).join("") +
         `<button type="button" class="btn small" onclick="pickTrainMax('${key}')">Max</button>`;
       return `
       <tr>
-        <td class="unit-cell"><span class="unit-portrait">${UNIT_ICONS[key] || ""}</span></td>
-        <td><b>${def.name}</b><br><small class="muted">Off ${def.off} · Def ${def.def} · Tempo ${def.speed} · trägt ${def.carry}</small></td>
+        <td class="unit-cell"><span class="unit-portrait">${
+          UNIT_ICONS[key] || ""
+        }</span></td>
+        <td><b>${def.name}</b><br><small class="muted">Off ${def.off} · Def ${
+        def.def
+      } · Tempo ${def.speed} · trägt ${def.carry}</small></td>
         <td class="num" data-label="Im Dorf">${fmtNum(u.count)}</td>
-        <td data-label="Kosten"><div class="train-sum" id="train-sum-${key}">${trainSummaryHtml(key, cnt)}</div></td>
+        <td data-label="Kosten"><div class="train-sum" id="train-sum-${key}">${trainSummaryHtml(
+        key,
+        cnt
+      )}</div></td>
         <td data-label="Ausbilden">
           <div class="train-presets">${presetBtns}</div>
           <div class="train-input">
@@ -1321,14 +1424,20 @@ renderers.militaer = () => {
     ? v.trainQueue
         .map(
           (q) =>
-            `<div class="queue-item"><span>${q.count}× ${meta.UNITS[q.unit].name}</span>${countdown(q.done)}</div>`,
+            `<div class="queue-item"><span>${q.count}× ${
+              meta.UNITS[q.unit].name
+            }</span>${countdown(q.done)}</div>`
         )
         .join("")
     : '<p class="muted">Keine laufende Ausbildung.</p>';
 
   $("#tab-militaer").innerHTML = `
     <h2>Militär</h2>
-    ${v.buildings.kaserne.level < 1 ? '<div class="card"><p class="muted">⚠️ Baue zuerst eine <b>Kaserne</b>, um Truppen auszubilden.</p></div>' : ""}
+    ${
+      v.buildings.kaserne.level < 1
+        ? '<div class="card"><p class="muted">⚠️ Baue zuerst eine <b>Kaserne</b>, um Truppen auszubilden.</p></div>'
+        : ""
+    }
     <div class="grid-moves">
       <div class="card"><h3 style="margin-top:0">Truppenbewegungen</h3>${movementsHtml()}</div>
       <div class="card"><h3 style="margin-top:0">Ausbildung</h3>${tq}</div>
@@ -1386,19 +1495,25 @@ renderers.karte = async () => {
     selectedTile,
     selectedNode,
     explored,
-    selectedExplore,
+    selectedExplore
   );
 
   const res = state.village.residents || { idle: 0, total: 0 };
   el.innerHTML = `
-    <h2>Weltkarte <small class="muted">Zentrum (${mapCenter.x}|${mapCenter.y}) · 👷 ${res.idle}/${res.total} Bewohner frei</small></h2>
+    <h2>Weltkarte <small class="muted">Zentrum (${mapCenter.x}|${
+    mapCenter.y
+  }) · 👷 ${res.idle}/${res.total} Bewohner frei</small></h2>
     <div class="map-controls">
       <button class="btn small" onclick="moveMap(-5,0)">←</button>
       <button class="btn small" onclick="moveMap(5,0)">→</button>
       <button class="btn small" onclick="moveMap(0,-5)">↑</button>
       <button class="btn small" onclick="moveMap(0,5)">↓</button>
-      <input id="gotoX" type="number" min="0" max="${meta.WORLD_SIZE - 1}" value="${mapCenter.x}">
-      <input id="gotoY" type="number" min="0" max="${meta.WORLD_SIZE - 1}" value="${mapCenter.y}">
+      <input id="gotoX" type="number" min="0" max="${
+        meta.WORLD_SIZE - 1
+      }" value="${mapCenter.x}">
+      <input id="gotoY" type="number" min="0" max="${
+        meta.WORLD_SIZE - 1
+      }" value="${mapCenter.y}">
       <button class="btn small" onclick="gotoCoords()">Springen</button>
       <button class="btn small" onclick="centerHome()">🏰 Mein Dorf</button>
     </div>
@@ -1425,13 +1540,13 @@ renderers.karte = async () => {
     "map",
     (dx, dy) => moveMap(dx, dy),
     58,
-    5 * 58,
+    5 * 58
   );
 
   // Aus der Rangliste angesprungenes Dorf jetzt automatisch auswählen.
   if (pendingMapSelect) {
     const target = (data.villages || []).find(
-      (v) => v.x === pendingMapSelect.x && v.y === pendingMapSelect.y,
+      (v) => v.x === pendingMapSelect.x && v.y === pendingMapSelect.y
     );
     pendingMapSelect = null;
     if (target) {
@@ -1589,8 +1704,8 @@ function renderVillageDetail() {
           state.village.units[k].count,
           `atk-${k}`,
           "updateTravelPreview()",
-          "off",
-        ),
+          "off"
+        )
       )
       .join("");
     const scoutMax = state.village.units.spaeher?.count || 0;
@@ -1602,16 +1717,24 @@ function renderVillageDetail() {
           <label>Späher (max. ${scoutMax})
             <input type="number" min="0" max="${scoutMax}" value="0" id="scout-count" oninput="updateScoutPreview()">
           </label>
-          <button class="btn" ${scoutMax ? "" : "disabled"} onclick="actionScout()">🔍 Späher losschicken</button>
+          <button class="btn" ${
+            scoutMax ? "" : "disabled"
+          } onclick="actionScout()">🔍 Späher losschicken</button>
         </div>
         <div class="chance-line"><span class="muted">Erfolgschance</span> <b id="scoutChance">—</b></div>
-        ${scoutMax ? "" : '<p class="muted small">Du hast keine Späher. Bilde sie in der Kaserne aus.</p>'}
+        ${
+          scoutMax
+            ? ""
+            : '<p class="muted small">Du hast keine Späher. Bilde sie in der Kaserne aus.</p>'
+        }
       </div>`;
     attackForm = `
       <h4 class="picker-title">⚔️ Truppen auswählen</h4>
       <div class="unit-picker">${inputs}</div>
       <div class="attack-preview">
-        <div><span class="muted">Entfernung</span><b>${dist.toFixed(1)} Felder</b></div>
+        <div><span class="muted">Entfernung</span><b>${dist.toFixed(
+          1
+        )} Felder</b></div>
         <div><span class="muted">Reisezeit</span><b id="travelPreview" class="gold">—</b></div>
         <div><span class="muted">Angriffskraft</span><b id="atkPowerPreview" class="red">0</b></div>
         <div><span class="muted">Max. Beute</span><b id="lootPreview" class="green">0</b></div>
@@ -1620,7 +1743,9 @@ function renderVillageDetail() {
       <p class="muted small" id="winChanceHint">🔍 Erfolgschance unbekannt — spähe das Dorf zuerst aus.</p>
       <p class="muted small">Beute = Tragekapazität deiner Truppen. Wie viele Rohstoffe wirklich im Ziel liegen, siehst du erst im Kampfbericht — oder vorab per Spähen.</p>
       <button class="btn primary" onclick="actionAttack()">⚔️ Angriff starten</button>
-      <p class="muted small">👑 <b>Adelung:</b> Schicke einen <b>Paladin</b> mit. Übersteht er einen gewonnenen Angriff, sinkt die Treue des Dorfes. Nach ${meta.CONQUEST_ATTACKS || 3} solcher Angriffe gehört das Dorf dir.</p>
+      <p class="muted small">👑 <b>Adelung:</b> Schicke einen <b>Paladin</b> mit. Übersteht er einen gewonnenen Angriff, sinkt die Treue des Dorfes. Nach ${
+        meta.CONQUEST_ATTACKS || 3
+      } solcher Angriffe gehört das Dorf dir.</p>
       ${scoutForm}`;
   }
 
@@ -1628,7 +1753,10 @@ function renderVillageDetail() {
   let conquestBanner = "";
   if (t.conquest) {
     const { progress, needed } = t.conquest;
-    conquestBanner = `<div class="conquest-bar" title="Adelungs-Fortschritt">👑 Treue gebrochen: <b>${progress}/${needed}</b> — noch ${Math.max(0, needed - progress)} Paladin-Angriff(e) bis zur Eroberung.</div>`;
+    conquestBanner = `<div class="conquest-bar" title="Adelungs-Fortschritt">👑 Treue gebrochen: <b>${progress}/${needed}</b> — noch ${Math.max(
+      0,
+      needed - progress
+    )} Paladin-Angriff(e) bis zur Eroberung.</div>`;
   }
 
   // Verstärkungs-Formular für eigene weitere Dörfer und Allianzmitglieder.
@@ -1637,18 +1765,17 @@ function renderVillageDetail() {
     const rows = Object.entries(meta.UNITS)
       .filter(([, def]) => !def.scout)
       .map(([k, def]) =>
-        unitPickerCard(
-          k,
-          def,
-          state.village.units[k]?.count || 0,
-          `reinf-${k}`,
-        ),
+        unitPickerCard(k, def, state.village.units[k]?.count || 0, `reinf-${k}`)
       )
       .join("");
     reinforceForm = `
       <div class="reinforce-box">
         <h4>🤝 Verstärkung entsenden</h4>
-        <p class="muted small">Schicke Truppen nach ${esc(t.village)} (${dist.toFixed(1)} Felder). Sie verteidigen das Dorf mit und lassen sich jederzeit zurückbeordern. Späher können nicht verstärken.</p>
+        <p class="muted small">Schicke Truppen nach ${esc(
+          t.village
+        )} (${dist.toFixed(
+      1
+    )} Felder). Sie verteidigen das Dorf mit und lassen sich jederzeit zurückbeordern. Späher können nicht verstärken.</p>
         <div class="unit-picker">${rows}</div>
         <button class="btn primary" onclick="actionReinforce()">🤝 Verstärkung schicken</button>
       </div>`;
@@ -1656,8 +1783,12 @@ function renderVillageDetail() {
 
   el.innerHTML = `
     <div class="card">
-      <h3 style="margin-top:0">${esc(t.village)} <small class="muted">(${t.x}|${t.y})</small></h3>
-      <p>Besitzer: <b class="gold">${esc(t.owner)}</b>${t.alliance ? ` · Allianz: [${esc(t.alliance)}]` : ""} · ${fmtNum(t.points)} Punkte</p>
+      <h3 style="margin-top:0">${esc(t.village)} <small class="muted">(${t.x}|${
+    t.y
+  })</small></h3>
+      <p>Besitzer: <b class="gold">${esc(t.owner)}</b>${
+    t.alliance ? ` · Allianz: [${esc(t.alliance)}]` : ""
+  } · ${fmtNum(t.points)} Punkte</p>
       ${conquestBanner}
       ${attackForm}
       ${reinforceForm}
@@ -1723,7 +1854,7 @@ window.updateTravelPreview = () => {
   }
   const dist = Math.hypot(
     state.village.x - selectedTile.x,
-    state.village.y - selectedTile.y,
+    state.village.y - selectedTile.y
   );
   el.textContent = fmtDur((dist / (slowest * meta.SPEED)) * 3_600_000);
 };
@@ -1836,7 +1967,7 @@ window.cancelMove = async (id) => {
 window.recallGather = async (id) => {
   if (
     !confirm(
-      "Sammelmission abbrechen? Die Bewohner kehren ohne Rohstoffe zurück.",
+      "Sammelmission abbrechen? Die Bewohner kehren ohne Rohstoffe zurück."
     )
   )
     return;
@@ -1866,18 +1997,30 @@ function renderExploreDetail() {
   const scoutMax = state.village.units.spaeher?.count || 0;
   el.innerHTML = `
     <div class="card">
-      <h3 style="margin-top:0">🧭 Unerkundetes Gebiet <small class="muted">(${p.x}|${p.y})</small></h3>
+      <h3 style="margin-top:0">🧭 Unerkundetes Gebiet <small class="muted">(${
+        p.x
+      }|${p.y})</small></h3>
       <p class="muted small">Dieses Feld liegt im Nebel des Krieges. Schicke Späher hierher, um die Umgebung dauerhaft aufzudecken. Die Späher kehren anschließend heim.</p>
       <div class="scout-row">
         <label>Späher (max. ${scoutMax})
-          <input type="number" min="1" max="${scoutMax}" value="${Math.min(scoutMax, 1) || 1}" id="explore-count">
+          <input type="number" min="1" max="${scoutMax}" value="${
+    Math.min(scoutMax, 1) || 1
+  }" id="explore-count">
         </label>
-        <button class="btn primary" ${scoutMax ? "" : "disabled"} onclick="actionExplore()">🧭 Erkunden</button>
+        <button class="btn primary" ${
+          scoutMax ? "" : "disabled"
+        } onclick="actionExplore()">🧭 Erkunden</button>
       </div>
       <div class="attack-preview">
-        <div><span class="muted">Entfernung</span><b>${dist.toFixed(1)} Felder</b></div>
+        <div><span class="muted">Entfernung</span><b>${dist.toFixed(
+          1
+        )} Felder</b></div>
       </div>
-      ${scoutMax ? "" : '<p class="muted small">Du hast keine Späher. Bilde sie in der Kaserne aus.</p>'}
+      ${
+        scoutMax
+          ? ""
+          : '<p class="muted small">Du hast keine Späher. Bilde sie in der Kaserne aus.</p>'
+      }
     </div>`;
 }
 
@@ -1924,22 +2067,30 @@ function renderNodeDetail() {
           def,
           state.village.units[k].count,
           `guard-${k}`,
-          "updateGatherPreview()",
-        ),
+          "updateGatherPreview()"
+        )
       )
       .join("") ||
     '<p class="muted small">Keine Truppen im Dorf, die du als Wache mitschicken könntest.</p>';
 
   el.innerHTML = `
     <div class="card">
-      <h3 style="margin-top:0">${info.icon} ${info.label} <small class="muted">(${n.x}|${n.y})</small></h3>
-      <p>Ergiebigkeit: <b class="gold">${"★".repeat(n.richness)}${"☆".repeat(3 - n.richness)}</b> · liefert <b>${info.res}</b></p>
+      <h3 style="margin-top:0">${info.icon} ${
+    info.label
+  } <small class="muted">(${n.x}|${n.y})</small></h3>
+      <p>Ergiebigkeit: <b class="gold">${"★".repeat(n.richness)}${"☆".repeat(
+    3 - n.richness
+  )}</b> · liefert <b>${info.res}</b></p>
       <p class="muted small">Schicke freie Bewohner hierher. Sie reisen hin, sammeln und kehren mit Rohstoffen zurück.</p>
       <div class="gather-row">
         <label>Bewohner (frei: ${idle})
-          <input type="number" min="1" max="${Math.max(1, idle)}" value="${Math.min(idle, 5) || 1}" id="gather-count" oninput="updateGatherPreview()">
+          <input type="number" min="1" max="${Math.max(1, idle)}" value="${
+    Math.min(idle, 5) || 1
+  }" id="gather-count" oninput="updateGatherPreview()">
         </label>
-        <button class="btn primary" ${idle ? "" : "disabled"} onclick="actionGather()">👷 Bewohner losschicken</button>
+        <button class="btn primary" ${
+          idle ? "" : "disabled"
+        } onclick="actionGather()">👷 Bewohner losschicken</button>
       </div>
       <div class="guard-box">
         <h4 style="margin:.4rem 0">🛡️ Wachen mitschicken <small class="muted">(optional)</small></h4>
@@ -1947,14 +2098,20 @@ function renderNodeDetail() {
         <div class="unit-picker">${guardInputs}</div>
       </div>
       <div class="attack-preview">
-        <div><span class="muted">Entfernung</span><b>${dist.toFixed(1)} Felder</b></div>
+        <div><span class="muted">Entfernung</span><b>${dist.toFixed(
+          1
+        )} Felder</b></div>
         <div><span class="muted">Dauer (hin+sammeln+zurück)</span><b id="gatherTime" class="gold">—</b></div>
         <div><span class="muted">Erwartete Beute</span><b id="gatherYield" class="green">0</b></div>
         <div><span class="muted">Wach-Verteidigung</span><b id="guardDef" class="blue">0</b></div>
         <div><span class="muted">Erfolgschance</span><b id="gatherChance">—</b></div>
       </div>
       <p class="muted small" id="gatherChanceHint"></p>
-      ${idle ? "" : '<p class="muted small">Alle Bewohner sind unterwegs. Baue das Rathaus aus, um mehr Bewohner zu bekommen.</p>'}
+      ${
+        idle
+          ? ""
+          : '<p class="muted small">Alle Bewohner sind unterwegs. Baue das Rathaus aus, um mehr Bewohner zu bekommen.</p>'
+      }
     </div>`;
   window.updateGatherPreview();
 }
@@ -1969,19 +2126,21 @@ window.updateGatherPreview = () => {
   const n = Math.max(0, Number($("#gather-count")?.value || 0));
   const dist = Math.hypot(
     state.village.x - selectedNode.x,
-    state.village.y - selectedNode.y,
+    state.village.y - selectedNode.y
   );
   const travel = (dist / g.workerSpeedEff) * 3_600_000;
   const total = travel * 2 + g.workMs;
   const yieldAmt = Math.round(
-    n * (selectedNode.richness || 1) * g.yieldPerWorker,
+    n * (selectedNode.richness || 1) * g.yieldPerWorker
   );
   const tEl = $("#gatherTime");
   const yEl = $("#gatherYield");
   if (tEl) tEl.textContent = n >= 1 ? fmtDur(total) : "—";
   if (yEl) {
     const info = NODE_META[selectedNode.res];
-    yEl.textContent = `${fmtNum(yieldAmt)} ${info ? info.res : selectedNode.res}`;
+    yEl.textContent = `${fmtNum(yieldAmt)} ${
+      info ? info.res : selectedNode.res
+    }`;
   }
   // Wach-Verteidigung aus den ausgewählten Truppen summieren.
   const gEl = $("#guardDef");
@@ -2002,7 +2161,7 @@ window.updateGatherPreview = () => {
     const perRich = g.banditPerRich ?? 5;
     const bandit = Math.round(
       (base + perRich * (selectedNode.richness || 1)) *
-        Math.sqrt(Math.max(1, n)),
+        Math.sqrt(Math.max(1, n))
     );
     const repelled = guardDef >= bandit;
     const pct = n < 1 ? 0 : repelled ? 100 : Math.round((1 - ambush) * 100);
@@ -2015,8 +2174,18 @@ window.updateGatherPreview = () => {
       cEl.className = chanceClass(pct);
       if (hintEl) {
         hintEl.textContent = repelled
-          ? `🛡️ Deine Wachen (${fmtNum(guardDef)}) wehren die Räuber (Stärke ~${fmtNum(bandit)}) ab — Bewohner sicher.`
-          : `⚠️ Räuberstärke ~${fmtNum(bandit)} übersteigt deine Wachen (${fmtNum(guardDef)}). Bei einem Überfall (${Math.round(ambush * 100)} %) fallen Bewohner.`;
+          ? `🛡️ Deine Wachen (${fmtNum(
+              guardDef
+            )}) wehren die Räuber (Stärke ~${fmtNum(
+              bandit
+            )}) ab — Bewohner sicher.`
+          : `⚠️ Räuberstärke ~${fmtNum(
+              bandit
+            )} übersteigt deine Wachen (${fmtNum(
+              guardDef
+            )}). Bei einem Überfall (${Math.round(
+              ambush * 100
+            )} %) fallen Bewohner.`;
       }
     }
   }
@@ -2085,17 +2254,25 @@ function renderMarket(offers) {
           const mine = o.seller === state.user.name;
           const allyBadge =
             o.scope === "alliance"
-              ? ` <span class="ally-offer" title="Nur für deine Allianz sichtbar">🛡️${o.alliance ? " [" + esc(o.alliance) + "]" : ""}</span>`
+              ? ` <span class="ally-offer" title="Nur für deine Allianz sichtbar">🛡️${
+                  o.alliance ? " [" + esc(o.alliance) + "]" : ""
+                }</span>`
               : "";
           return `
       <tr>
-        <td>${esc(o.seller)}${mine ? ' <span class="gold">(du)</span>' : ""}${allyBadge}</td>
+        <td>${esc(o.seller)}${
+            mine ? ' <span class="gold">(du)</span>' : ""
+          }${allyBadge}</td>
         <td>${costHtml({ [o.give.res]: o.give.amount })}</td>
         <td>${costHtml({ [o.want.res]: o.want.amount })}</td>
         <td>${
           mine
             ? `<button class="btn small danger" onclick="marketAction('cancel','${o.id}')">Zurückziehen</button>`
-            : `<button class="btn small primary" onclick="marketAction('accept','${o.id}','${o.scope || "world"}')" ${canTrade ? "" : "disabled"}>Annehmen</button>`
+            : `<button class="btn small primary" onclick="marketAction('accept','${
+                o.id
+              }','${o.scope || "world"}')" ${
+                canTrade ? "" : "disabled"
+              }>Annehmen</button>`
         }</td>
       </tr>`;
         })
@@ -2130,7 +2307,9 @@ function renderMarket(offers) {
         <label>Menge <input id="wantAmt" type="number" min="1" value="100" style="width:90px"></label>
         ${
           canAlliance && state.user.allianceTag
-            ? `<label>Sichtbar für <select id="offerScope"><option value="world">Alle Spieler</option><option value="alliance">Nur Allianz [${esc(state.user.allianceTag)}]</option></select></label>`
+            ? `<label>Sichtbar für <select id="offerScope"><option value="world">Alle Spieler</option><option value="alliance">Nur Allianz [${esc(
+                state.user.allianceTag
+              )}]</option></select></label>`
             : ""
         }
         <button class="btn primary" onclick="marketAction('create')">Anbieten</button>
@@ -2151,7 +2330,9 @@ function renderMarket(offers) {
     <div class="card"><p class="muted">🌍 <b>Welthandel</b> (eigene Angebote erstellen und fremde annehmen) ab Marktplatz-Stufe ${tiers.offers}. Baue deinen Marktplatz weiter aus.</p></div>`;
 
   el.innerHTML = `
-    <h2>Marktplatz${mLvl > 0 ? ` <small class="muted">Stufe ${mLvl}</small>` : ""}</h2>
+    <h2>Marktplatz${
+      mLvl > 0 ? ` <small class="muted">Stufe ${mLvl}</small>` : ""
+    }</h2>
     ${transportCardHtml()}
     ${exchangeCard}
     ${tradeCard}`;
@@ -2172,7 +2353,11 @@ function transportCardHtml() {
   const opts = others
     .map(
       (v) =>
-        `<option value="${v.id}"${v.hasMarket === false ? " disabled" : ""}>${esc(v.name)} (${v.x}|${v.y})${v.hasMarket === false ? " — kein Marktplatz" : ""}</option>`,
+        `<option value="${v.id}"${
+          v.hasMarket === false ? " disabled" : ""
+        }>${esc(v.name)} (${v.x}|${v.y})${
+          v.hasMarket === false ? " — kein Marktplatz" : ""
+        }</option>`
     )
     .join("");
   const canSend = state.village.buildings.markt.level >= tiers.transfer;
@@ -2180,14 +2365,30 @@ function transportCardHtml() {
   return `
     <div class="card">
       <h3 style="margin-top:0">Rohstoffe an eigenes Dorf schicken</h3>
-      ${canSend ? '<p class="muted">Ein Handelskarren bringt die Rohstoffe zu einem deiner anderen Dörfer. Reisezeit hängt von der Entfernung ab.</p>' : '<p class="muted">⚠️ Baue zuerst einen <b>Marktplatz</b>, um Rohstoffe verschicken zu können.</p>'}
-      ${canSend && anyBlocked ? '<p class="muted">ℹ️ Nur Dörfer <b>mit Marktplatz</b> können Lieferungen empfangen.</p>' : ""}
+      ${
+        canSend
+          ? '<p class="muted">Ein Handelskarren bringt die Rohstoffe zu einem deiner anderen Dörfer. Reisezeit hängt von der Entfernung ab.</p>'
+          : '<p class="muted">⚠️ Baue zuerst einen <b>Marktplatz</b>, um Rohstoffe verschicken zu können.</p>'
+      }
+      ${
+        canSend && anyBlocked
+          ? '<p class="muted">ℹ️ Nur Dörfer <b>mit Marktplatz</b> können Lieferungen empfangen.</p>'
+          : ""
+      }
       <div class="formrow">
         <label>Zieldorf <select id="trTarget">${opts}</select></label>
-        <label>${RES_NAMES.holz} <input id="trHolz" type="number" min="0" value="0" style="width:80px"></label>
-        <label>${RES_NAMES.stein} <input id="trStein" type="number" min="0" value="0" style="width:80px"></label>
-        <label>${RES_NAMES.eisen} <input id="trEisen" type="number" min="0" value="0" style="width:80px"></label>
-        <button class="btn primary" onclick="transportRes()" ${canSend ? "" : "disabled"}>Senden</button>
+        <label>${
+          RES_NAMES.holz
+        } <input id="trHolz" type="number" min="0" value="0" style="width:80px"></label>
+        <label>${
+          RES_NAMES.stein
+        } <input id="trStein" type="number" min="0" value="0" style="width:80px"></label>
+        <label>${
+          RES_NAMES.eisen
+        } <input id="trEisen" type="number" min="0" value="0" style="width:80px"></label>
+        <button class="btn primary" onclick="transportRes()" ${
+          canSend ? "" : "disabled"
+        }>Senden</button>
       </div>
     </div>`;
 }
@@ -2228,7 +2429,9 @@ window.marketAction = async (what, id, scope) => {
         wantAmount: Number($("#exWantAmt").value),
       });
       toast(
-        `Getauscht: ${r.give.amount} ${RES_NAMES[r.give.res]} → ${r.want.amount} ${RES_NAMES[r.want.res]}.`,
+        `Getauscht: ${r.give.amount} ${RES_NAMES[r.give.res]} → ${
+          r.want.amount
+        } ${RES_NAMES[r.want.res]}.`
       );
       offers = await api("/api/market");
     } else {
@@ -2237,8 +2440,8 @@ window.marketAction = async (what, id, scope) => {
         what !== "accept"
           ? "Angebot zurückgezogen."
           : scope === "alliance"
-            ? "Handel besiegelt — die Karre ist unterwegs."
-            : "Handel abgeschlossen!",
+          ? "Handel besiegelt — die Karre ist unterwegs."
+          : "Handel abgeschlossen!"
       );
     }
     await refreshState();
@@ -2269,15 +2472,19 @@ function renderOwnAlliance(a) {
     .map(
       (m) => `
     <tr>
-      <td>${m.online ? "🟢" : "⚫"} <b>${esc(m.name)}</b>${m.name === a.leader ? " 👑" : ""}</td>
+      <td>${m.online ? "🟢" : "⚫"} <b>${esc(m.name)}</b>${
+        m.name === a.leader ? " 👑" : ""
+      }</td>
       <td class="num">${fmtNum(m.points)}</td>
       <td>(${m.x}|${m.y})</td>
       <td>${
         state.user.name === a.leader && m.name !== a.leader
-          ? `<button class="btn small danger" onclick="allianceAction('kick','${esc(m.name)}')">Entfernen</button>`
+          ? `<button class="btn small danger" onclick="allianceAction('kick','${esc(
+              m.name
+            )}')">Entfernen</button>`
           : ""
       }</td>
-    </tr>`,
+    </tr>`
     )
     .join("");
 
@@ -2290,10 +2497,14 @@ function renderOwnAlliance(a) {
       <td><b>${esc(r.name)}</b></td>
       <td class="num">${fmtNum(r.points)}</td>
       <td class="ally-req-actions">
-        <button class="btn small primary" onclick="allianceAction('accept','${r.id}')">Aufnehmen</button>
-        <button class="btn small danger" onclick="allianceAction('decline','${r.id}')">Ablehnen</button>
+        <button class="btn small primary" onclick="allianceAction('accept','${
+          r.id
+        }')">Aufnehmen</button>
+        <button class="btn small danger" onclick="allianceAction('decline','${
+          r.id
+        }')">Ablehnen</button>
       </td>
-    </tr>`,
+    </tr>`
     )
     .join("");
   const requestsCard = reqs.length
@@ -2311,7 +2522,11 @@ function renderOwnAlliance(a) {
     <h2>[${esc(a.tag)}] ${esc(a.name)}</h2>
     ${requestsCard}
     <div class="card">
-      <p class="muted">Anführer: <b class="gold">${esc(a.leader)}</b> · ${a.members.length}/${a.maxMembers || 10} Mitglieder · Allianzmitglieder können einander nicht angreifen.</p>
+      <p class="muted">Anführer: <b class="gold">${esc(a.leader)}</b> · ${
+    a.members.length
+  }/${
+    a.maxMembers || 10
+  } Mitglieder · Allianzmitglieder können einander nicht angreifen.</p>
       <table style="margin-top:10px">
         <thead><tr><th>Mitglied</th><th class="num">Punkte</th><th>Dorf</th><th></th></tr></thead>
         <tbody>${members}</tbody>
@@ -2333,10 +2548,10 @@ function renderAllianceLobby(list) {
         a.requested
           ? `<button class="btn small" onclick="allianceAction('cancel','${a.id}')">Anfrage zurückziehen</button>`
           : a.memberCount >= (a.maxMembers || 10)
-            ? '<span class="muted">Voll</span>'
-            : `<button class="btn small primary" onclick="allianceAction('join','${a.id}')">Beitreten</button>`
+          ? '<span class="muted">Voll</span>'
+          : `<button class="btn small primary" onclick="allianceAction('join','${a.id}')">Beitreten</button>`
       }</td>
-    </tr>`,
+    </tr>`
         )
         .join("")
     : '<tr><td colspan="4" class="muted">Noch keine Allianzen — gründe die erste!</td></tr>';
@@ -2439,7 +2654,9 @@ function renderChatLog(messages) {
         .map((m) => {
           const mine = m.from === state.user.name;
           return `<div class="chat-msg${mine ? " mine" : ""}">
-            <span class="chat-meta"><b>${esc(m.from)}</b><time>${chatTime(m.time)}</time></span>
+            <span class="chat-meta"><b>${esc(m.from)}</b><time>${chatTime(
+            m.time
+          )}</time></span>
             <span class="chat-text">${esc(m.text)}</span>
           </div>`;
         })
@@ -2535,10 +2752,14 @@ function renderFriendData(d) {
         <td><b>${esc(r.name)}</b></td>
         <td class="muted">${esc(relTime(r.time))}</td>
         <td>
-          <button class="btn small primary" onclick="friendRespond('accept','${r.id}')">Annehmen</button>
-          <button class="btn small danger" onclick="friendRespond('decline','${r.id}')">Ablehnen</button>
+          <button class="btn small primary" onclick="friendRespond('accept','${
+            r.id
+          }')">Annehmen</button>
+          <button class="btn small danger" onclick="friendRespond('decline','${
+            r.id
+          }')">Ablehnen</button>
         </td>
-      </tr>`,
+      </tr>`
       )
       .join("");
     inEl.innerHTML = `<h3 style="margin-top:0">Eingehende Anfragen <span class="muted">(${d.incoming.length})</span></h3>
@@ -2557,8 +2778,10 @@ function renderFriendData(d) {
       <tr>
         <td><b>${esc(r.name)}</b></td>
         <td class="muted">${esc(relTime(r.time))}</td>
-        <td><button class="btn small" onclick="friendRespond('decline','${r.id}')">Zurückziehen</button></td>
-      </tr>`,
+        <td><button class="btn small" onclick="friendRespond('decline','${
+          r.id
+        }')">Zurückziehen</button></td>
+      </tr>`
       )
       .join("");
     outEl.innerHTML = `<h3 style="margin-top:0">Gesendete Anfragen <span class="muted">(${d.outgoing.length})</span></h3>
@@ -2575,12 +2798,20 @@ function renderFriendData(d) {
         .map(
           (f) => `
       <tr>
-        <td>${f.online ? "🟢" : "⚫"} <b>${esc(f.name)}</b>${f.alliance ? ` <span class="muted">[${esc(f.alliance)}]</span>` : ""}</td>
+        <td>${f.online ? "🟢" : "⚫"} <b>${esc(f.name)}</b>${
+            f.alliance ? ` <span class="muted">[${esc(f.alliance)}]</span>` : ""
+          }</td>
         <td class="num">${fmtNum(f.points)}</td>
-        <td>${f.x != null ? `<a href="#" class="coord-link" title="Auf der Karte anzeigen" onclick="showOnMap(${f.x}, ${f.y}); return false;">(${f.x}|${f.y})</a>` : "—"}</td>
+        <td>${
+          f.x != null
+            ? `<a href="#" class="coord-link" title="Auf der Karte anzeigen" onclick="showOnMap(${f.x}, ${f.y}); return false;">(${f.x}|${f.y})</a>`
+            : "—"
+        }</td>
         <td class="muted">${f.online ? "online" : esc(relTime(f.lastSeen))}</td>
-        <td><button class="btn small danger" onclick="friendRemove('${esc(f.name)}')">Entfernen</button></td>
-      </tr>`,
+        <td><button class="btn small danger" onclick="friendRemove('${esc(
+          f.name
+        )}')">Entfernen</button></td>
+      </tr>`
         )
         .join("")
     : '<tr><td colspan="5" class="muted">Noch keine Freunde — schick jemandem eine Anfrage!</td></tr>';
@@ -2648,7 +2879,7 @@ function rewardHtml(reward) {
     .filter(([, n]) => n > 0)
     .map(
       ([r, n]) =>
-        `<span title="${RES_NAMES[r]}">${RES_ICONS[r]} ${fmtNum(n)}</span>`,
+        `<span title="${RES_NAMES[r]}">${RES_ICONS[r]} ${fmtNum(n)}</span>`
     )
     .join(" ");
 }
@@ -2686,9 +2917,15 @@ function renderQuestData(d) {
     <div class="quest-level">
       <div class="quest-level-badge">${d.level}</div>
       <div class="quest-level-info">
-        <div class="quest-level-top"><b>Stufe ${d.level}</b><span class="muted">${fmtNum(d.into)} / ${fmtNum(d.need)} XP</span></div>
+        <div class="quest-level-top"><b>Stufe ${
+          d.level
+        }</b><span class="muted">${fmtNum(d.into)} / ${fmtNum(
+    d.need
+  )} XP</span></div>
         <div class="bar"><span style="width:${pct}%"></span></div>
-        <div class="muted small">Abgeschlossen: ${d.claimed}/${d.total} Aufträge</div>
+        <div class="muted small">Abgeschlossen: ${d.claimed}/${
+    d.total
+  } Aufträge</div>
       </div>
     </div>`;
 
@@ -2700,7 +2937,7 @@ function renderQuestData(d) {
     return 1;
   };
   const quests = [...d.quests].sort(
-    (a, b) => rank(a) - rank(b) || a.reqLevel - b.reqLevel,
+    (a, b) => rank(a) - rank(b) || a.reqLevel - b.reqLevel
   );
 
   listEl.innerHTML = quests
@@ -2721,7 +2958,9 @@ function renderQuestData(d) {
         cls += " ready";
         action = `<button class="btn small primary" onclick="claimQuest('${q.id}')">Belohnung abholen</button>`;
       } else {
-        action = `<span class="quest-state muted">${fmtNum(q.current)} / ${fmtNum(q.target)}</span>`;
+        action = `<span class="quest-state muted">${fmtNum(
+          q.current
+        )} / ${fmtNum(q.target)}</span>`;
       }
       return `
       <div class="${cls} card">
@@ -2735,7 +2974,9 @@ function renderQuestData(d) {
         <p class="muted quest-desc">${esc(q.desc)}</p>
         <div class="bar slim"><span style="width:${pc}%"></span></div>
         <div class="quest-foot">
-          <span class="muted small">${fmtNum(q.current)} / ${fmtNum(q.target)}</span>
+          <span class="muted small">${fmtNum(q.current)} / ${fmtNum(
+        q.target
+      )}</span>
           <span class="quest-reward">Belohnung: ${rewardHtml(q.reward)}</span>
         </div>
       </div>`;
@@ -2762,7 +3003,7 @@ window.claimQuest = async (id) => {
       });
     }
     toast(
-      `Auftrag abgeschlossen — +${d.xpGained} XP${parts ? ", " + parts : ""}.`,
+      `Auftrag abgeschlossen — +${d.xpGained} XP${parts ? ", " + parts : ""}.`
     );
   } catch (e) {
     toast(e.message, true);
@@ -2815,12 +3056,28 @@ renderers.berichte = async () => {
       .map(([k, n]) => {
         const l = lost[k] || 0;
         const left = n - l;
-        return `<tr><td>${meta.UNITS[k].name}</td><td class="num">${fmtNum(n)}</td><td class="num red">${l ? "−" + fmtNum(l) : "—"}</td><td class="num ${left ? "green" : "red"}">${fmtNum(left)}</td></tr>`;
+        return `<tr><td>${meta.UNITS[k].name}</td><td class="num">${fmtNum(
+          n
+        )}</td><td class="num red">${
+          l ? "−" + fmtNum(l) : "—"
+        }</td><td class="num ${left ? "green" : "red"}">${fmtNum(
+          left
+        )}</td></tr>`;
       })
       .join("");
     const totSent = sum(sent);
     const totLost = sum(lost);
-    return `<h3>${label}</h3><table><thead><tr><th>Einheit</th><th class="num">Anzahl</th><th class="num">Verluste</th><th class="num">Übrig</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">keine Truppen</td></tr>'}</tbody>${totSent ? `<tfoot><tr><td>Summe</td><td class="num">${fmtNum(totSent)}</td><td class="num red">${totLost ? "−" + fmtNum(totLost) : "—"}</td><td class="num">${fmtNum(totSent - totLost)}</td></tr></tfoot>` : ""}</table>`;
+    return `<h3>${label}</h3><table><thead><tr><th>Einheit</th><th class="num">Anzahl</th><th class="num">Verluste</th><th class="num">Übrig</th></tr></thead><tbody>${
+      rows || '<tr><td colspan="4" class="muted">keine Truppen</td></tr>'
+    }</tbody>${
+      totSent
+        ? `<tfoot><tr><td>Summe</td><td class="num">${fmtNum(
+            totSent
+          )}</td><td class="num red">${
+            totLost ? "−" + fmtNum(totLost) : "—"
+          }</td><td class="num">${fmtNum(totSent - totLost)}</td></tr></tfoot>`
+        : ""
+    }</table>`;
   };
 
   // Kräftevergleich als Balken (Angriffskraft vs. effektive Verteidigung)
@@ -2851,31 +3108,53 @@ renderers.berichte = async () => {
           ? troops
               .map(
                 ([k, n]) =>
-                  `<tr><td>${meta.UNITS[k]?.name || k}</td><td class="num">${fmtNum(n)}</td></tr>`,
+                  `<tr><td>${
+                    meta.UNITS[k]?.name || k
+                  }</td><td class="num">${fmtNum(n)}</td></tr>`
               )
               .join("")
           : '<tr><td colspan="2" class="muted">keine Truppen im Dorf</td></tr>';
         const wallNote =
           r.intel.wall > 0
-            ? `<p class="muted small">Stadtmauer Stufe ${r.intel.wall} (+${r.intel.wall * 6} % Verteidigung) · Lager fasst ${fmtNum(r.intel.storage)}</p>`
-            : `<p class="muted small">Keine Stadtmauer · Lager fasst ${fmtNum(r.intel.storage)}</p>`;
+            ? `<p class="muted small">Stadtmauer Stufe ${r.intel.wall} (+${
+                r.intel.wall * 6
+              } % Verteidigung) · Lager fasst ${fmtNum(r.intel.storage)}</p>`
+            : `<p class="muted small">Keine Stadtmauer · Lager fasst ${fmtNum(
+                r.intel.storage
+              )}</p>`;
         body = `
           <div class="rloot"><b>💰 Rohstoffe im Dorf</b> ${resHtml}</div>
           <table><thead><tr><th>Einheit</th><th class="num">Anzahl</th></tr></thead><tbody>${troopRows}</tbody></table>
           ${wallNote}
-          <p class="muted small">Verlorene Späher: ${fmtNum(r.attacker.lost.spaeher || 0)} von ${fmtNum(r.attacker.sent.spaeher || 0)}</p>`;
+          <p class="muted small">Verlorene Späher: ${fmtNum(
+            r.attacker.lost.spaeher || 0
+          )} von ${fmtNum(r.attacker.sent.spaeher || 0)}</p>`;
       } else {
-        body = `<p class="red">Deine Späher wurden abgefangen — keine Informationen. Verluste: ${fmtNum(r.attacker.lost.spaeher || 0)} von ${fmtNum(r.attacker.sent.spaeher || 0)} Spähern.</p>`;
+        body = `<p class="red">Deine Späher wurden abgefangen — keine Informationen. Verluste: ${fmtNum(
+          r.attacker.lost.spaeher || 0
+        )} von ${fmtNum(r.attacker.sent.spaeher || 0)} Spähern.</p>`;
       }
     } else {
       // Ich bin der Ausgespähte
       body = r.success
-        ? `<p class="red">${esc(r.attacker.name)} (${esc(r.attacker.village)}, ${r.attacker.x}|${r.attacker.y}) hat dein Dorf erfolgreich ausgespäht — er kennt jetzt deine Rohstoffe und Truppen!</p>`
-        : `<p class="green">Du hast feindliche Späher von ${esc(r.attacker.name)} (${esc(r.attacker.village)}, ${r.attacker.x}|${r.attacker.y}) abgefangen. Keine Informationen preisgegeben.</p>`;
+        ? `<p class="red">${esc(r.attacker.name)} (${esc(
+            r.attacker.village
+          )}, ${r.attacker.x}|${
+            r.attacker.y
+          }) hat dein Dorf erfolgreich ausgespäht — er kennt jetzt deine Rohstoffe und Truppen!</p>`
+        : `<p class="green">Du hast feindliche Späher von ${esc(
+            r.attacker.name
+          )} (${esc(r.attacker.village)}, ${r.attacker.x}|${
+            r.attacker.y
+          }) abgefangen. Keine Informationen preisgegeben.</p>`;
     }
     return `
-      <div class="card report ${success ? "won" : "lost"}" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
-        <div class="rhead"><b>🔍 ${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+      <div class="card report ${
+        success ? "won" : "lost"
+      }" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
+        <div class="rhead"><b>🔍 ${esc(
+          r.title
+        )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">${body}</div>
       </div>`;
   };
@@ -2891,26 +3170,46 @@ renderers.berichte = async () => {
     const partner = r.partner || {};
     const partnerLine =
       partner.name != null
-        ? `<p class="muted">${iAmSeller ? "Käufer" : "Verkäufer"}: ${esc(partner.name)}${partner.village != null ? ` (${esc(partner.village)}, ${partner.x}|${partner.y})` : ""}</p>`
+        ? `<p class="muted">${iAmSeller ? "Käufer" : "Verkäufer"}: ${esc(
+            partner.name
+          )}${
+            partner.village != null
+              ? ` (${esc(partner.village)}, ${partner.x}|${partner.y})`
+              : ""
+          }</p>`
         : "";
     const shortNote = shortfall
-      ? `<p class="muted small red">⚠️ Nur ${fmtNum(r.received.amount)} von ${fmtNum(r.received.offered)} gutgeschrieben — dein Lager war voll.</p>`
+      ? `<p class="muted small red">⚠️ Nur ${fmtNum(
+          r.received.amount
+        )} von ${fmtNum(
+          r.received.offered
+        )} gutgeschrieben — dein Lager war voll.</p>`
       : "";
     const pendingNote =
       pending && r.arrival
-        ? `<p class="muted small">🛒 Die Handelskarre ist unterwegs — Ankunft ${fmtTime(r.arrival)}.</p>`
+        ? `<p class="muted small">🛒 Die Handelskarre ist unterwegs — Ankunft ${fmtTime(
+            r.arrival
+          )}.</p>`
         : "";
     const stockHtml = r.stock ? costHtml(r.stock) : "";
     return `
       <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
-        <div class="rhead"><b>⚖️ ${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+        <div class="rhead"><b>⚖️ ${esc(
+          r.title
+        )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">
           ${partnerLine}
           ${pendingNote}
-          <div class="rloot"><b>${pending ? "🛒 Erwartet" : "📥 Erhalten"}</b> ${gotHtml}</div>
+          <div class="rloot"><b>${
+            pending ? "🛒 Erwartet" : "📥 Erhalten"
+          }</b> ${gotHtml}</div>
           <div class="rloot"><b>📤 Abgegeben</b> ${paidHtml}</div>
           ${shortNote}
-          ${stockHtml ? `<div class="rloot"><b>📦 Lager jetzt</b> ${stockHtml}</div>` : ""}
+          ${
+            stockHtml
+              ? `<div class="rloot"><b>📦 Lager jetzt</b> ${stockHtml}</div>`
+              : ""
+          }
         </div>
       </div>`;
   };
@@ -2920,17 +3219,27 @@ renderers.berichte = async () => {
     const resName = RES_NAMES[r.res] || r.res;
     const gotHtml = costHtml({ [r.res]: r.stored });
     const wasteNote = r.wasted
-      ? `<p class="muted small red">⚠️ ${fmtNum(r.wasted)} ${resName} gingen verloren — dein Lager war voll.</p>`
+      ? `<p class="muted small red">⚠️ ${fmtNum(
+          r.wasted
+        )} ${resName} gingen verloren — dein Lager war voll.</p>`
       : "";
     const stockHtml = r.stock ? costHtml(r.stock) : "";
     return `
       <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
-        <div class="rhead"><b>👷 ${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+        <div class="rhead"><b>👷 ${esc(
+          r.title
+        )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">
-          <p class="muted">${fmtNum(r.workers)}× Bewohner am Vorkommen (${r.x}|${r.y})</p>
+          <p class="muted">${fmtNum(r.workers)}× Bewohner am Vorkommen (${
+      r.x
+    }|${r.y})</p>
           <div class="rloot"><b>📥 Gesammelt</b> ${gotHtml}</div>
           ${wasteNote}
-          ${stockHtml ? `<div class="rloot"><b>📦 Lager jetzt</b> ${stockHtml}</div>` : ""}
+          ${
+            stockHtml
+              ? `<div class="rloot"><b>📦 Lager jetzt</b> ${stockHtml}</div>`
+              : ""
+          }
         </div>
       </div>`;
   };
@@ -2947,10 +3256,20 @@ renderers.berichte = async () => {
     const cls = r.repelled ? "won" : "lost";
     return `
       <div class="card report ${cls}" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
-        <div class="rhead"><b>${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+        <div class="rhead"><b>${esc(r.title)}</b><span class="rtime">${fmtTime(
+      r.time
+    )}</span></div>
         <div class="rbody hidden">
-          <p class="muted">Vorkommen (${r.x}|${r.y}) · Räuberstärke ${fmtNum(r.banditPower)} vs. Wach-Verteidigung ${fmtNum(r.guardDef)}</p>
-          ${r.residentsKilled ? `<p class="red">🪦 Gefallene Bewohner: <b>${fmtNum(r.residentsKilled)}</b> — sie wachsen im Rathaus nach.</p>` : '<p class="green">Alle Bewohner sind unversehrt.</p>'}
+          <p class="muted">Vorkommen (${r.x}|${r.y}) · Räuberstärke ${fmtNum(
+      r.banditPower
+    )} vs. Wach-Verteidigung ${fmtNum(r.guardDef)}</p>
+          ${
+            r.residentsKilled
+              ? `<p class="red">🪦 Gefallene Bewohner: <b>${fmtNum(
+                  r.residentsKilled
+                )}</b> — sie wachsen im Rathaus nach.</p>`
+              : '<p class="green">Alle Bewohner sind unversehrt.</p>'
+          }
           <p class="muted small">Verlorene Wachen: ${unitList(r.guardLost)}</p>
         </div>
       </div>`;
@@ -2960,7 +3279,9 @@ renderers.berichte = async () => {
   const reinforceReport = (r) => {
     return `
       <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
-        <div class="rhead"><b>${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+        <div class="rhead"><b>${esc(r.title)}</b><span class="rtime">${fmtTime(
+      r.time
+    )}</span></div>
         <div class="rbody hidden">
           ${r.x != null ? `<p class="muted">Ziel: (${r.x}|${r.y})</p>` : ""}
           <p><b>🤝 Truppen:</b> ${unitList(r.units)}</p>
@@ -2971,7 +3292,9 @@ renderers.berichte = async () => {
   const friendReport = (r) => {
     return `
       <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
-        <div class="rhead"><b>🤝 ${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+        <div class="rhead"><b>🤝 ${esc(
+          r.title
+        )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">
           <p class="muted">Du bist jetzt mit ${esc(r.partner)} befreundet.</p>
         </div>
@@ -2981,13 +3304,37 @@ renderers.berichte = async () => {
   // Sammelbericht ohne bekannten Renderer (z. B. Transport): schlichte Karte
   const genericReport = (r) => `
       <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
-        <div class="rhead"><b>${esc(r.title || r.kind || "Bericht")}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+        <div class="rhead"><b>${esc(
+          r.title || r.kind || "Bericht"
+        )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">
           ${r.from ? `<p class="muted">Von: ${esc(r.from)}</p>` : ""}
-          ${r.res ? `<div class="rloot"><b>📦 Rohstoffe</b> ${costHtml(r.res)}</div>` : ""}
-          ${r.returned ? `<div class="rloot"><b>↩️ Lager voll — zurückgeschickt</b> ${costHtml(r.returned)}</div>` : ""}
-          ${r.stock ? `<div class="rloot"><b>📦 Lager jetzt</b> ${costHtml(r.stock)}</div>` : ""}
-          ${r.x != null ? `<p class="muted small">Ziel: (${r.x}|${r.y})</p>` : ""}
+          ${
+            r.res
+              ? `<div class="rloot"><b>📦 Rohstoffe</b> ${costHtml(
+                  r.res
+                )}</div>`
+              : ""
+          }
+          ${
+            r.returned
+              ? `<div class="rloot"><b>↩️ Lager voll — zurückgeschickt</b> ${costHtml(
+                  r.returned
+                )}</div>`
+              : ""
+          }
+          ${
+            r.stock
+              ? `<div class="rloot"><b>📦 Lager jetzt</b> ${costHtml(
+                  r.stock
+                )}</div>`
+              : ""
+          }
+          ${
+            r.x != null
+              ? `<p class="muted small">Ziel: (${r.x}|${r.y})</p>`
+              : ""
+          }
         </div>
       </div>`;
 
@@ -3000,15 +3347,23 @@ renderers.berichte = async () => {
     if (r.won) {
       const capNote =
         r.capacity != null
-          ? ` <span class="muted">(${fmtNum(lootTotal)} von ${fmtNum(r.capacity)} Tragekapazität)</span>`
+          ? ` <span class="muted">(${fmtNum(lootTotal)} von ${fmtNum(
+              r.capacity
+            )} Tragekapazität)</span>`
           : "";
-      lootBlock = `<div class="rloot"><b>💰 Beute</b> ${lootTotal ? costHtml(r.loot) : '<span class="muted">nichts erbeutet</span>'}${capNote}</div>`;
+      lootBlock = `<div class="rloot"><b>💰 Beute</b> ${
+        lootTotal
+          ? costHtml(r.loot)
+          : '<span class="muted">nichts erbeutet</span>'
+      }${capNote}</div>`;
     } else {
       lootBlock = `<div class="rloot"><b>💰 Beute</b> <span class="muted">Angriff abgewehrt — keine Beute</span></div>`;
     }
     const wallNote =
       r.defender.wall != null && r.defender.wall > 0
-        ? ` · Stadtmauer Stufe ${r.defender.wall} (+${r.defender.wall * 6} % Verteidigung)`
+        ? ` · Stadtmauer Stufe ${r.defender.wall} (+${
+            r.defender.wall * 6
+          } % Verteidigung)`
         : "";
     const outcome = r.won
       ? `<span class="green">Angreifer siegreich</span>`
@@ -3017,29 +3372,56 @@ renderers.berichte = async () => {
     if (r.conquest) {
       conquestBlock = r.conquest.conquered
         ? `<div class="rloot"><b>👑 Adelung</b> <span class="green">Dorf erobert — es wechselt den Besitzer!</span></div>`
-        : `<div class="rloot"><b>👑 Adelung</b> Treue ${r.conquest.progress}/${r.conquest.needed} — noch ${Math.max(0, r.conquest.needed - r.conquest.progress)} Paladin-Angriff(e) bis zur Eroberung.</div>`;
+        : `<div class="rloot"><b>👑 Adelung</b> Treue ${r.conquest.progress}/${
+            r.conquest.needed
+          } — noch ${Math.max(
+            0,
+            r.conquest.needed - r.conquest.progress
+          )} Paladin-Angriff(e) bis zur Eroberung.</div>`;
     }
     return `
-      <div class="card report ${success ? "won" : "lost"}" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
-        <div class="rhead"><b>${success ? "✅" : "❌"} ${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+      <div class="card report ${
+        success ? "won" : "lost"
+      }" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
+        <div class="rhead"><b>${success ? "✅" : "❌"} ${esc(
+      r.title
+    )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">
-          <p class="muted">⚔️ ${esc(r.attacker.name)} (${esc(r.attacker.village)}, ${r.attacker.x}|${r.attacker.y}) → 🛡️ ${esc(r.defender.name)} (${esc(r.defender.village)}, ${r.defender.x}|${r.defender.y})<br>Ergebnis: ${outcome}${wallNote}</p>
+          <p class="muted">⚔️ ${esc(r.attacker.name)} (${esc(
+      r.attacker.village
+    )}, ${r.attacker.x}|${r.attacker.y}) → 🛡️ ${esc(r.defender.name)} (${esc(
+      r.defender.village
+    )}, ${r.defender.x}|${r.defender.y})<br>Ergebnis: ${outcome}${wallNote}</p>
           ${powerBar(r.attacker.power || 0, r.defender.power || 0)}
           ${lootBlock}
           ${conquestBlock}
-          ${r.defender.residentsLost ? `<p class="red">🪦 Gefallene Bewohner beim Verteidiger: <b>${fmtNum(r.defender.residentsLost)}</b> — wachsen im Rathaus nach.</p>` : ""}
+          ${
+            r.defender.residentsLost
+              ? `<p class="red">🪦 Gefallene Bewohner beim Verteidiger: <b>${fmtNum(
+                  r.defender.residentsLost
+                )}</b> — wachsen im Rathaus nach.</p>`
+              : ""
+          }
           ${
             r.defender.garrisonLost
               ? `<p class="muted small">Verlorene Verstärkung: ${Object.entries(
-                  r.defender.garrisonLost,
+                  r.defender.garrisonLost
                 )
                   .map(([k, n]) => `${fmtNum(n)}× ${meta.UNITS[k]?.name || k}`)
                   .join(", ")}</p>`
               : ""
           }
           <div class="grid2">
-            <div>${unitTable("Angreifer", r.attacker.sent, r.attacker.lost)}</div>
-            <div>${unitTable("Verteidiger", r.defender.had, r.defender.lost)}</div>
+            <div>${unitTable(
+              "Angreifer",
+              r.attacker.sent,
+              r.attacker.lost
+            )}</div>
+            <div>${unitTable(
+              "Verteidiger",
+              r.defender.had,
+              r.defender.lost
+            )}</div>
           </div>
         </div>
       </div>`;
@@ -3049,15 +3431,31 @@ renderers.berichte = async () => {
   const conquestReport = (r) => {
     const mine = r.mine;
     return `
-      <div class="card report ${mine ? "won" : "lost"}" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
-        <div class="rhead"><b>${mine ? "👑" : "🏳️"} ${esc(r.title)}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+      <div class="card report ${
+        mine ? "won" : "lost"
+      }" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
+        <div class="rhead"><b>${mine ? "👑" : "🏳️"} ${esc(
+      r.title
+    )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">
           ${
             mine
-              ? `<p class="green">Dein Paladin hat <b>${esc(r.village.name)}</b> (${r.village.x}|${r.village.y}) erobert — es gehört jetzt zu deinem Reich!</p>
-                 <p class="muted">Bisheriger Besitzer: ${esc(r.formerOwner)}</p>`
-              : `<p class="red">Du hast <b>${esc(r.village.name)}</b> (${r.village.x}|${r.village.y}) verloren.</p>
-                 <p class="muted">Neuer Besitzer: ${esc(r.conqueror.name)} (${esc(r.conqueror.village)}, ${r.conqueror.x}|${r.conqueror.y})</p>`
+              ? `<p class="green">Dein Paladin hat <b>${esc(
+                  r.village.name
+                )}</b> (${r.village.x}|${
+                  r.village.y
+                }) erobert — es gehört jetzt zu deinem Reich!</p>
+                 <p class="muted">Bisheriger Besitzer: ${esc(
+                   r.formerOwner
+                 )}</p>`
+              : `<p class="red">Du hast <b>${esc(r.village.name)}</b> (${
+                  r.village.x
+                }|${r.village.y}) verloren.</p>
+                 <p class="muted">Neuer Besitzer: ${esc(
+                   r.conqueror.name
+                 )} (${esc(r.conqueror.village)}, ${r.conqueror.x}|${
+                  r.conqueror.y
+                })</p>`
           }
         </div>
       </div>`;
@@ -3098,10 +3496,16 @@ renderers.berichte = async () => {
       ? reports.length
       : reports.filter((r) => r.villageId === vid).length;
   const vChip = (vid, label, count) =>
-    `<button class="rvfilter-chip${reportVillage === vid ? " active" : ""}" onclick="filterReportVillage('${vid}')">${label}<span class="rfilter-count">${count}</span></button>`;
+    `<button class="rvfilter-chip${
+      reportVillage === vid ? " active" : ""
+    }" onclick="filterReportVillage('${vid}')">${label}<span class="rfilter-count">${count}</span></button>`;
   const villageRow =
     villages.length > 1
-      ? `<div class="rvfilter">${vChip("all", "🌍 Alle Dörfer", reports.length)}${villages
+      ? `<div class="rvfilter">${vChip(
+          "all",
+          "🌍 Alle Dörfer",
+          reports.length
+        )}${villages
           .map((vv) => vChip(vv.id, `🏰 ${esc(vv.name)}`, villageCount(vv.id)))
           .join("")}</div>`
       : "";
@@ -3138,13 +3542,21 @@ renderers.berichte = async () => {
     "Freundschaft",
   ];
   const presentKinds = KIND_ORDER.filter((k) => counts[k]).concat(
-    Object.keys(counts).filter((k) => !KIND_ORDER.includes(k)),
+    Object.keys(counts).filter((k) => !KIND_ORDER.includes(k))
   );
 
   const chip = (k, label, count) =>
-    `<button class="rfilter-chip${reportFilter === k ? " active" : ""}" data-kind="${esc(k)}" onclick="filterReports(this.dataset.kind)">${label}<span class="rfilter-count">${count}</span></button>`;
+    `<button class="rfilter-chip${
+      reportFilter === k ? " active" : ""
+    }" data-kind="${esc(
+      k
+    )}" onclick="filterReports(this.dataset.kind)">${label}<span class="rfilter-count">${count}</span></button>`;
   const chipsHtml = scoped.length
-    ? `<div class="rfilter">${chip("Alle", "📋 Alle", scoped.length)}${presentKinds
+    ? `<div class="rfilter">${chip(
+        "Alle",
+        "📋 Alle",
+        scoped.length
+      )}${presentKinds
         .map((k) => chip(k, `${KIND_ICON[k] || "📜"} ${k}`, counts[k]))
         .join("")}</div>`
     : "";
@@ -3155,7 +3567,9 @@ renderers.berichte = async () => {
           const kind = r.kind || "Kampf";
           const hidden =
             reportFilter !== "Alle" && reportFilter !== kind ? " hidden" : "";
-          return `<div class="report-wrap${hidden}" data-kind="${esc(kind)}">${renderReport(r)}</div>`;
+          return `<div class="report-wrap${hidden}" data-kind="${esc(
+            kind
+          )}">${renderReport(r)}</div>`;
         })
         .join("")
     : '<p class="muted">Noch keine Berichte für dieses Dorf.</p>';
@@ -3180,12 +3594,22 @@ renderers.rangliste = async () => {
       (p, i) => `
     <tr ${p.name === state.user.name ? 'style="color:var(--gold)"' : ""}>
       <td class="num">${i + 1}.</td>
-      <td><b>${esc(p.name)}</b>${p.alliance ? ` <span class="muted">[${esc(p.alliance)}]</span>` : ""}</td>
-      <td><a href="#" class="coord-link" title="Auf der Karte anzeigen" onclick="showOnMap(${p.x}, ${p.y}); return false;">(${p.x}|${p.y})</a></td>
+      <td><b>${esc(p.name)}</b>${
+        p.alliance ? ` <span class="muted">[${esc(p.alliance)}]</span>` : ""
+      }</td>
+      <td><a href="#" class="coord-link" title="Auf der Karte anzeigen" onclick="showOnMap(${
+        p.x
+      }, ${p.y}); return false;">(${p.x}|${p.y})</a></td>
       <td class="num">${fmtNum(p.villages)}</td>
       <td class="num">${fmtNum(p.points)}</td>
-      <td>${p.name === state.user.name || p.friend ? "" : `<button class="btn small" onclick="friendRequestFor('${esc(p.name)}')">🤝 Freund</button>`}</td>
-    </tr>`,
+      <td>${
+        p.name === state.user.name || p.friend
+          ? ""
+          : `<button class="btn small" onclick="friendRequestFor('${esc(
+              p.name
+            )}')">🤝 Freund</button>`
+      }</td>
+    </tr>`
     )
     .join("");
   el.innerHTML = `
@@ -3245,12 +3669,16 @@ renderers.shop = async () => {
   const boost =
     shop.boosts && shop.boosts.production ? shop.boosts.production : null;
   const boostBanner = boost
-    ? `<div class="card shop-boost">⚡ <b>Produktionsboost aktiv</b> (×${boost.mult}) — endet in ${countdown(boost.until, { tag: "b" })}</div>`
+    ? `<div class="card shop-boost">⚡ <b>Produktionsboost aktiv</b> (×${
+        boost.mult
+      }) — endet in ${countdown(boost.until, { tag: "b" })}</div>`
     : "";
 
   const testBadge = shop.testMode
     ? `<div class="card shop-test">🧪 <b>Testmodus</b> — es ist keine PayPal-App hinterlegt. Käufe werden <b>ohne echte Zahlung</b> simuliert. Für echte Zahlungen <code>PAYPAL_CLIENT_ID</code> und <code>PAYPAL_SECRET</code> als Umgebungsvariablen setzen.</div>`
-    : `<p class="muted">Sichere Bezahlung über PayPal${shop.paypalEnv === "sandbox" ? " <b>(Sandbox)</b>" : ""}. Artikel werden dem <b>aktiven Dorf</b> gutgeschrieben.</p>`;
+    : `<p class="muted">Sichere Bezahlung über PayPal${
+        shop.paypalEnv === "sandbox" ? " <b>(Sandbox)</b>" : ""
+      }. Artikel werden dem <b>aktiven Dorf</b> gutgeschrieben.</p>`;
 
   const cards = shop.items
     .map(
@@ -3264,14 +3692,16 @@ renderers.shop = async () => {
         </div>
       </div>
       <div class="shop-buy">
-        <div class="shop-price">${it.price.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</div>
+        <div class="shop-price">${it.price.toLocaleString("de-DE", {
+          minimumFractionDigits: 2,
+        })} €</div>
         ${
           shop.testMode
             ? `<button class="btn primary" disabled title="Nur mit hinterlegter PayPal-App verfügbar">Testkauf</button>`
             : `<div class="pp-buttons" id="pp-${it.id}" data-item="${it.id}" data-price="${it.price}"></div>`
         }
       </div>
-    </div>`,
+    </div>`
     )
     .join("");
 
@@ -3281,7 +3711,11 @@ renderers.shop = async () => {
         <table><tbody>${shop.purchases
           .map(
             (p) =>
-              `<tr><td>${fmtTime(p.at)}</td><td><b>${esc(p.name)}</b>${p.test ? ' <span class="muted">(Test)</span>' : ""}</td><td class="num">${Number(p.price).toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</td></tr>`,
+              `<tr><td>${fmtTime(p.at)}</td><td><b>${esc(p.name)}</b>${
+                p.test ? ' <span class="muted">(Test)</span>' : ""
+              }</td><td class="num">${Number(p.price).toLocaleString("de-DE", {
+                minimumFractionDigits: 2,
+              })} €</td></tr>`
           )
           .join("")}</tbody></table>
       </div>`
@@ -3324,7 +3758,7 @@ renderers.shop = async () => {
     } catch (e) {
       el.insertAdjacentHTML(
         "beforeend",
-        `<p class="red">${esc(e.message)}</p>`,
+        `<p class="red">${esc(e.message)}</p>`
       );
     }
   }
@@ -3545,7 +3979,9 @@ renderers.changelog = () => {
     const latest = i === 0 ? '<span class="cl-latest">Aktuell</span>' : "";
     return `<div class="card cl-release">
       <div class="cl-head">
-        <h3>Version ${esc(rel.version)}${rel.title ? ` — ${esc(rel.title)}` : ""} ${latest}</h3>
+        <h3>Version ${esc(rel.version)}${
+      rel.title ? ` — ${esc(rel.title)}` : ""
+    } ${latest}</h3>
         <span class="muted cl-date">${esc(rel.date)}</span>
       </div>
       <ul class="cl-list">${items}</ul>
@@ -3573,7 +4009,9 @@ renderers.profil = async () => {
   const pollOpts = [2000, 4000, 8000]
     .map(
       (ms) =>
-        `<option value="${ms}" ${settings.pollMs === ms ? "selected" : ""}>${ms / 1000} Sekunden</option>`,
+        `<option value="${ms}" ${settings.pollMs === ms ? "selected" : ""}>${
+          ms / 1000
+        } Sekunden</option>`
     )
     .join("");
 
@@ -3584,11 +4022,21 @@ renderers.profil = async () => {
       <h3 style="margin-top:0">Konto</h3>
       <table>
         <tbody>
-          <tr><td>Spielername</td><td><b class="gold">${esc(p.name)}</b></td></tr>
-          <tr><td>Dorf</td><td>${esc(p.village.name)} <span class="muted">(${p.village.x}|${p.village.y})</span></td></tr>
+          <tr><td>Spielername</td><td><b class="gold">${esc(
+            p.name
+          )}</b></td></tr>
+          <tr><td>Dorf</td><td>${esc(p.village.name)} <span class="muted">(${
+    p.village.x
+  }|${p.village.y})</span></td></tr>
           <tr><td>Punkte</td><td>${fmtNum(p.village.points)}</td></tr>
-          <tr><td>Allianz</td><td>${p.alliance ? `[${esc(p.alliance.tag)}] ${esc(p.alliance.name)}` : '<span class="muted">keine</span>'}</td></tr>
-          <tr><td>Gefochtene Berichte</td><td>${fmtNum(p.reportCount)} · davon ${fmtNum(p.attackWins)} gewonnene Angriffe</td></tr>
+          <tr><td>Allianz</td><td>${
+            p.alliance
+              ? `[${esc(p.alliance.tag)}] ${esc(p.alliance.name)}`
+              : '<span class="muted">keine</span>'
+          }</td></tr>
+          <tr><td>Gefochtene Berichte</td><td>${fmtNum(
+            p.reportCount
+          )} · davon ${fmtNum(p.attackWins)} gewonnene Angriffe</td></tr>
           <tr><td>Mitglied seit</td><td>${fmtTime(p.created)}</td></tr>
           <tr><td>Zuletzt online</td><td>${fmtTime(p.lastSeen)}</td></tr>
         </tbody>
@@ -3599,7 +4047,9 @@ renderers.profil = async () => {
       <div class="card">
         <h3 style="margin-top:0">Dorf umbenennen</h3>
         <div class="formrow">
-          <label>Name <input id="profVillage" maxlength="30" value="${esc(p.village.name)}"></label>
+          <label>Name <input id="profVillage" maxlength="30" value="${esc(
+            p.village.name
+          )}"></label>
           <button class="btn primary" onclick="profileRename()">Speichern</button>
         </div>
       </div>
@@ -3618,7 +4068,9 @@ renderers.profil = async () => {
     <div class="card">
       <h3 style="margin-top:0">Einstellungen <small class="muted">(nur in diesem Browser)</small></h3>
       <div class="formrow">
-        <label><input type="checkbox" id="setNotify" ${settings.notifications ? "checked" : ""} onchange="setSetting('notifications', this.checked)"> Benachrichtigungen anzeigen</label>
+        <label><input type="checkbox" id="setNotify" ${
+          settings.notifications ? "checked" : ""
+        } onchange="setSetting('notifications', this.checked)"> Benachrichtigungen anzeigen</label>
         <label>Aktualisierungs-Intervall <select id="setPoll" onchange="setSetting('pollMs', Number(this.value))">${pollOpts}</select></label>
       </div>
     </div>`;

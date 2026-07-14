@@ -183,11 +183,11 @@ function findFreeTile() {
     const r = radius * (0.5 + Math.random() * 0.7);
     const x = Math.max(
       0,
-      Math.min(WORLD_SIZE - 1, Math.round(c + Math.cos(a) * r)),
+      Math.min(WORLD_SIZE - 1, Math.round(c + Math.cos(a) * r))
     );
     const y = Math.max(
       0,
-      Math.min(WORLD_SIZE - 1, Math.round(c + Math.sin(a) * r)),
+      Math.min(WORLD_SIZE - 1, Math.round(c + Math.sin(a) * r))
     );
     if (!db.world[`${x},${y}`]) return [x, y];
     if (attempt % 50 === 49) radius += 2;
@@ -353,7 +353,7 @@ function regenResidents(v, now) {
 function residentsTotal(v) {
   return Math.max(
     0,
-    residentsCap(v.buildings.rathaus) - (v.residentsLost || 0),
+    residentsCap(v.buildings.rathaus) - (v.residentsLost || 0)
   );
 }
 
@@ -396,7 +396,7 @@ function produceSpanMult(v, from, to, mult) {
   for (const r of RES) {
     v.res[r] = Math.min(
       cap,
-      v.res[r] + prodPerHour(v.buildings[r]) * hours * mult,
+      v.res[r] + prodPerHour(v.buildings[r]) * hours * mult
     );
   }
 }
@@ -865,7 +865,7 @@ export function sendResources(user, targetId, resCounts) {
     fail("Rohstoffe kannst du nur an deine eigenen Dörfer schicken.");
   if ((target.buildings.markt || 0) < MARKET_TIERS.transfer)
     fail(
-      `${target.name} hat keinen Marktplatz und kann keine Rohstoffe empfangen.`,
+      `${target.name} hat keinen Marktplatz und kann keine Rohstoffe empfangen.`
     );
   touchVillage(target);
 
@@ -985,7 +985,7 @@ function resolveAttack(ev, now) {
   if (won) {
     residentsKilled = killResidents(
       dv,
-      residentsTotal(dv) * Math.min(0.3, defLossFrac * 0.3),
+      residentsTotal(dv) * Math.min(0.3, defLossFrac * 0.3)
     );
   }
 
@@ -1035,10 +1035,10 @@ function resolveAttack(ev, now) {
     title: conquest?.conquered
       ? `👑 ${dv.name} erobert!`
       : conquest
-        ? `Sieg gegen ${dv.name} — Treue ${conquest.progress}/${conquest.needed}`
-        : won
-          ? `Sieg gegen ${dv.name}`
-          : `Niederlage gegen ${dv.name}`,
+      ? `Sieg gegen ${dv.name} — Treue ${conquest.progress}/${conquest.needed}`
+      : won
+      ? `Sieg gegen ${dv.name}`
+      : `Niederlage gegen ${dv.name}`,
   });
   addReport(defenderUser, {
     ...report,
@@ -1046,10 +1046,10 @@ function resolveAttack(ev, now) {
     title: conquest?.conquered
       ? `😱 ${attacker.name} hat ${dv.name} erobert!`
       : conquest
-        ? `${attacker.name} adelt dein Dorf — Treue ${conquest.progress}/${conquest.needed}`
-        : won
-          ? `${av.name} hat dich geplündert!`
-          : `Angriff von ${av.name} abgewehrt`,
+      ? `${attacker.name} adelt dein Dorf — Treue ${conquest.progress}/${conquest.needed}`
+      : won
+      ? `${av.name} hat dich geplündert!`
+      : `Angriff von ${av.name} abgewehrt`,
   });
 
   // Zusätzlicher Eroberungs-Bericht bei erfolgreicher Adelung (3. Paladin-Angriff).
@@ -1158,7 +1158,7 @@ function resolveScout(ev, now) {
     // Der Verteidiger verliert beim Abfangen selbst ein paar Späher
     const defLoss = Math.min(
       defScouts,
-      Math.round(defScouts * Math.min(1, Math.pow(ratio, 1.2)) * 0.5),
+      Math.round(defScouts * Math.min(1, Math.pow(ratio, 1.2)) * 0.5)
     );
     dv.units.spaeher -= defLoss;
   }
@@ -1324,7 +1324,9 @@ function resolveReinforce(ev, now) {
     addReport(host, {
       time: now,
       kind: "Verstärkung",
-      title: `🛡️ ${sender ? sender.name : "Ein Verbündeter"} verstärkt ${to.name}: ${label}`,
+      title: `🛡️ ${sender ? sender.name : "Ein Verbündeter"} verstärkt ${
+        to.name
+      }: ${label}`,
       x: to.x,
       y: to.y,
       units: ev.units,
@@ -1472,7 +1474,7 @@ function resolveGather(ev, now) {
       const overrun = 1 - ratio;
       residentsKilled = Math.min(
         workers,
-        Math.round(workers * Math.min(0.75, overrun)),
+        Math.round(workers * Math.min(0.75, overrun))
       );
       workers -= residentsKilled;
       const gloss = Math.min(1, 0.4 + overrun * 0.6);
@@ -1498,7 +1500,9 @@ function resolveGather(ev, now) {
       kind: "Überfall",
       title: ambush.repelled
         ? `🛡️ Räuber am ${nodeLabel(ev.res)} (${ev.x}|${ev.y}) abgewehrt`
-        : `🗡️ Überfall am ${nodeLabel(ev.res)} (${ev.x}|${ev.y}): ${residentsKilled} Bewohner gefallen`,
+        : `🗡️ Überfall am ${nodeLabel(ev.res)} (${ev.x}|${
+            ev.y
+          }): ${residentsKilled} Bewohner gefallen`,
       res: ev.res,
       x: ev.x,
       y: ev.y,
@@ -1583,21 +1587,21 @@ export function marketCreate(user, give, want, scope = "world") {
   touchVillage(v);
   if (v.buildings.markt < MARKET_TIERS.offers)
     fail(
-      `Welthandel erst ab Marktplatz Stufe ${MARKET_TIERS.offers}. Baue deinen Marktplatz weiter aus.`,
+      `Welthandel erst ab Marktplatz Stufe ${MARKET_TIERS.offers}. Baue deinen Marktplatz weiter aus.`
     );
   const allianceOnly = scope === "alliance";
   if (allianceOnly && v.buildings.markt < MARKET_TIERS.alliance)
     fail(
-      `Allianz-interne Angebote erst ab Marktplatz Stufe ${MARKET_TIERS.alliance}.`,
+      `Allianz-interne Angebote erst ab Marktplatz Stufe ${MARKET_TIERS.alliance}.`
     );
   if (allianceOnly && !user.allianceId)
     fail("Nur als Allianzmitglied kannst du interne Angebote erstellen.");
   const mine = db.market.filter(
-    (o) => o.seller === user.name.toLowerCase(),
+    (o) => o.seller === user.name.toLowerCase()
   ).length;
   if (mine >= v.buildings.markt)
     fail(
-      `Marktplatz Stufe ${v.buildings.markt}: max. ${v.buildings.markt} aktive Angebote.`,
+      `Marktplatz Stufe ${v.buildings.markt}: max. ${v.buildings.markt} aktive Angebote.`
     );
   const g = {
     res: String(give?.res),
@@ -1644,7 +1648,7 @@ export function marketAccept(user, offerId) {
   touchVillage(seller);
   if (buyer.buildings.markt < MARKET_TIERS.offers)
     fail(
-      `Welthandel erst ab Marktplatz Stufe ${MARKET_TIERS.offers}. Baue deinen Marktplatz weiter aus.`,
+      `Welthandel erst ab Marktplatz Stufe ${MARKET_TIERS.offers}. Baue deinen Marktplatz weiter aus.`
     );
   if (buyer.res[offer.want.res] < offer.want.amount)
     fail("Nicht genügend Rohstoffe zum Kauf.");
@@ -1721,11 +1725,11 @@ export function marketAccept(user, offerId) {
   const sellerBefore = seller.res[offer.want.res];
   buyer.res[offer.give.res] = Math.min(
     capB,
-    buyer.res[offer.give.res] + offer.give.amount,
+    buyer.res[offer.give.res] + offer.give.amount
   );
   seller.res[offer.want.res] = Math.min(
     capS,
-    seller.res[offer.want.res] + offer.want.amount,
+    seller.res[offer.want.res] + offer.want.amount
   );
   const buyerGot = buyer.res[offer.give.res] - buyerBefore;
   const sellerGot = seller.res[offer.want.res] - sellerBefore;
@@ -1768,7 +1772,7 @@ export function marketAccept(user, offerId) {
 
 export function marketCancel(user, offerId) {
   const idx = db.market.findIndex(
-    (o) => o.id === offerId && o.seller === user.name.toLowerCase(),
+    (o) => o.id === offerId && o.seller === user.name.toLowerCase()
   );
   if (idx === -1) fail("Angebot nicht gefunden.");
   const offer = db.market[idx];
@@ -1801,7 +1805,7 @@ export function marketExchange(user, giveRes, wantRes, wantAmount) {
   const cost = want * EXCHANGE_RATE;
   if (v.res[giveRes] < cost)
     fail(
-      `Nicht genügend Rohstoffe: ${cost} ${giveRes} nötig für ${want} ${wantRes}.`,
+      `Nicht genügend Rohstoffe: ${cost} ${giveRes} nötig für ${want} ${wantRes}.`
     );
   v.res[giveRes] -= cost;
   const cap = storageCap(v.buildings.lager);
@@ -1842,7 +1846,7 @@ export function allianceCreate(user, tag, name) {
   if (name.length < 3 || name.length > 30) fail("Name: 3–30 Zeichen.");
   if (
     Object.values(db.alliances).some(
-      (a) => a.tag.toLowerCase() === tag.toLowerCase(),
+      (a) => a.tag.toLowerCase() === tag.toLowerCase()
     )
   )
     fail("Kürzel bereits vergeben.");
@@ -1889,7 +1893,7 @@ export function allianceRequestJoin(user, id) {
 export function allianceCancelRequest(user, id) {
   const key = user.name.toLowerCase();
   const idx = db.allianceRequests.findIndex(
-    (r) => r.allianceId === id && r.user === key,
+    (r) => r.allianceId === id && r.user === key
   );
   if (idx < 0) fail("Anfrage nicht gefunden.");
   db.allianceRequests.splice(idx, 1);
@@ -1900,7 +1904,7 @@ export function allianceAcceptRequest(user, reqId) {
   if (a.leader !== user.name.toLowerCase())
     fail("Nur der Anführer kann Anfragen bearbeiten.");
   const idx = db.allianceRequests.findIndex(
-    (r) => r.id === reqId && r.allianceId === a.id,
+    (r) => r.id === reqId && r.allianceId === a.id
   );
   if (idx < 0) fail("Anfrage nicht gefunden.");
   const req = db.allianceRequests[idx];
@@ -1930,7 +1934,7 @@ export function allianceDeclineRequest(user, reqId) {
   if (a.leader !== user.name.toLowerCase())
     fail("Nur der Anführer kann Anfragen bearbeiten.");
   const idx = db.allianceRequests.findIndex(
-    (r) => r.id === reqId && r.allianceId === a.id,
+    (r) => r.id === reqId && r.allianceId === a.id
   );
   if (idx < 0) fail("Anfrage nicht gefunden.");
   const req = db.allianceRequests[idx];
@@ -1952,7 +1956,7 @@ export function allianceLeave(user) {
   if (a.members.length === 0) {
     // Aufgelöste Allianz: offene Anfragen verwerfen.
     db.allianceRequests = db.allianceRequests.filter(
-      (r) => r.allianceId !== a.id,
+      (r) => r.allianceId !== a.id
     );
     delete db.alliances[a.id];
   } else if (a.leader === user.name.toLowerCase()) a.leader = a.members[0];
@@ -1965,7 +1969,7 @@ export function allianceKick(user, memberName) {
   const key = String(memberName || "").toLowerCase();
   if (key === a.leader)
     fail(
-      "Der Anführer kann sich nicht selbst entfernen — verlasse die Allianz.",
+      "Der Anführer kann sich nicht selbst entfernen — verlasse die Allianz."
     );
   if (!a.members.includes(key)) fail("Kein Mitglied dieser Allianz.");
   a.members = a.members.filter((m) => m !== key);
@@ -2021,7 +2025,7 @@ export function allianceList(user) {
       maxMembers: MAX_ALLIANCE_MEMBERS,
       requested: key
         ? db.allianceRequests.some(
-            (r) => r.allianceId === a.id && r.user === key,
+            (r) => r.allianceId === a.id && r.user === key
           )
         : false,
       points: a.members.reduce((sum, m) => {
@@ -2080,7 +2084,7 @@ export function sendFriendRequest(user, targetName) {
     fail("Deine Anfrage läuft bereits.");
   // Gegenseitige Anfrage? Dann direkt als angenommen behandeln.
   const incoming = db.friendRequests.find(
-    (r) => r.from === tKey && r.to === key,
+    (r) => r.from === tKey && r.to === key
   );
   if (incoming) return acceptFriendRequest(user, incoming.id);
   if (
@@ -2134,7 +2138,7 @@ export function declineFriendRequest(user, id) {
   const key = user.name.toLowerCase();
   // Empfänger lehnt ab oder Absender zieht die Anfrage zurück.
   const idx = db.friendRequests.findIndex(
-    (r) => r.id === id && (r.to === key || r.from === key),
+    (r) => r.id === id && (r.to === key || r.from === key)
   );
   if (idx < 0) fail("Anfrage nicht gefunden.");
   db.friendRequests.splice(idx, 1);
@@ -2417,11 +2421,15 @@ function buildingEffect(key, level) {
     case "farm":
       return `${popCap(level)} Versorgung`;
     case "rathaus":
-      return `−${Math.round((1 - 1 / (1 + 0.04 * level)) * 100)} % Bauzeit · ${residentsCap(level)} Bewohner`;
+      return `−${Math.round(
+        (1 - 1 / (1 + 0.04 * level)) * 100
+      )} % Bauzeit · ${residentsCap(level)} Bewohner`;
     case "kaserne":
       return level < 1
         ? "schaltet Ausbildung frei"
-        : `−${Math.round((1 - 1 / (1 + 0.1 * (level - 1))) * 100)} % Ausbildungszeit`;
+        : `−${Math.round(
+            (1 - 1 / (1 + 0.1 * (level - 1))) * 100
+          )} % Ausbildungszeit`;
     case "markt":
       return level < 1 ? "schaltet Handel frei" : `${level} aktive Angebote`;
     case "mauer":
@@ -2505,7 +2513,7 @@ export function getState(user) {
         (e.type === "return" && e.to === v.id) ||
         (e.type === "transport" && (e.from === v.id || e.to === v.id)) ||
         ((e.type === "gather" || e.type === "gatherReturn") &&
-          e.village === v.id),
+          e.village === v.id)
     )
     .map((e) => {
       // Sammelmissionen laufen zwischen eigenem Dorf und einem Rohstoffvorkommen.
@@ -2531,8 +2539,8 @@ export function getState(user) {
             e.res === "holz"
               ? "Wald"
               : e.res === "stein"
-                ? "Steinbruch"
-                : "Eisenader",
+              ? "Steinbruch"
+              : "Eisenader",
           x: e.x,
           y: e.y,
           fromX: outbound ? v.x : e.x,
@@ -2563,8 +2571,8 @@ export function getState(user) {
       const other = db.villages[e.type === "return" ? e.from : e.to];
       // Rückkehr läuft zum eigenen Dorf, Angriff/Spähen vom eigenen Dorf weg.
       // Bei Erkundungs-Rückkehr fehlt ein Herkunfts-Dorf → Start-Koordinaten nutzen.
-      const fromX = e.type === "return" ? (e.fromX ?? other?.x) : v.x;
-      const fromY = e.type === "return" ? (e.fromY ?? other?.y) : v.y;
+      const fromX = e.type === "return" ? e.fromX ?? other?.x : v.x;
+      const fromY = e.type === "return" ? e.fromY ?? other?.y : v.y;
       const toX =
         e.type === "return" ? v.x : e.type === "explore" ? e.tx : other?.x;
       const toY =
@@ -2580,8 +2588,8 @@ export function getState(user) {
           e.type === "explore"
             ? `Erkundung (${e.tx}|${e.ty})`
             : other
-              ? other.name
-              : "?",
+            ? other.name
+            : "?",
         x: e.type === "explore" ? e.tx : other?.x,
         y: e.type === "explore" ? e.ty : other?.y,
         fromX,
@@ -2610,9 +2618,9 @@ export function getState(user) {
         RES.map((r) => [
           r,
           Math.round(
-            prodPerHour(v.buildings[r]) * productionMultiplier(v, now),
+            prodPerHour(v.buildings[r]) * productionMultiplier(v, now)
           ),
-        ]),
+        ])
       ),
       storage: storageCap(v.buildings.lager),
       pop: popUsed(v),
@@ -2674,32 +2682,42 @@ export function getState(user) {
       points: villagePoints(v),
       boosts: activeBoosts(v, now),
     },
-    villages: ownedVillages(user)
-      .map((vv) => {
-        touchVillage(vv, now);
-        return {
-          id: vv.id,
-          name: vv.name,
-          x: vv.x,
-          y: vv.y,
-          points: villagePoints(vv),
-          active: vv.id === v.id,
-          // Kann dieses Dorf Rohstoff-Lieferungen empfangen? (Marktplatz nötig)
-          hasMarket: (vv.buildings.markt || 0) >= MARKET_TIERS.transfer,
-        };
-      })
-      .sort((a, b) => a.name.localeCompare(b.name)),
+    villages: (() => {
+      const owned = ownedVillages(user);
+      // Hauptdorf = zuerst gegründetes eigenes Dorf (kleinste numerische ID).
+      const idNum = (id) => parseInt(String(id).replace(/\D/g, ""), 10) || 0;
+      const mainId = owned.reduce(
+        (min, vv) => (min === null || idNum(vv.id) < idNum(min) ? vv.id : min),
+        null
+      );
+      return owned
+        .map((vv) => {
+          touchVillage(vv, now);
+          return {
+            id: vv.id,
+            name: vv.name,
+            x: vv.x,
+            y: vv.y,
+            points: villagePoints(vv),
+            active: vv.id === v.id,
+            main: vv.id === mainId, // Hauptdorf (Startdorf)
+            // Kann dieses Dorf Rohstoff-Lieferungen empfangen? (Marktplatz nötig)
+            hasMarket: (vv.buildings.markt || 0) >= MARKET_TIERS.transfer,
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+    })(),
     movements: { incoming, outgoing },
     unreadReports: user.reports.filter((r) => !r.read).length,
     pendingFriendRequests: db.friendRequests.filter(
-      (r) => r.to === user.name.toLowerCase(),
+      (r) => r.to === user.name.toLowerCase()
     ).length,
     // Fremde Angebote am Markt (die eigenen zählen nicht als Störer).
     marketOffers: db.market.filter((o) => o.seller !== user.name.toLowerCase())
       .length,
     // Neue Chat-Nachrichten von anderen seit dem letzten Öffnen des Chats.
     unreadChat: db.chat.filter(
-      (m) => m.time > (user.lastChatSeen || 0) && m.from !== user.name,
+      (m) => m.time > (user.lastChatSeen || 0) && m.from !== user.name
     ).length,
     quests: questSummary(user, v),
   };
@@ -2719,7 +2737,7 @@ export function getProfile(user) {
   const v = db.villages[user.villageId];
   const alliance = user.allianceId ? db.alliances[user.allianceId] : null;
   const wins = user.reports.filter(
-    (r) => r.attacker?.name === user.name && r.won,
+    (r) => r.attacker?.name === user.name && r.won
   ).length;
   return {
     name: user.name,
