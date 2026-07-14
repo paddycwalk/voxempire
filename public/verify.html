@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>E-Mail bestätigen — VOXEMPIRE</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #12151c;
+        color: #e6e9ef;
+        font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      .box {
+        max-width: 420px;
+        padding: 32px;
+        text-align: center;
+      }
+      h1 {
+        color: #e9c46a;
+      }
+      a.btn {
+        display: inline-block;
+        margin-top: 20px;
+        padding: 10px 18px;
+        background: #e9c46a;
+        color: #12151c;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .muted {
+        color: #93a0b4;
+      }
+      .red {
+        color: #e07a7a;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <h1>VOXEMPIRE</h1>
+      <p id="msg" class="muted">E-Mail wird bestätigt …</p>
+      <a class="btn" href="/">Zum Spiel</a>
+    </div>
+    <script>
+      (async () => {
+        const msg = document.getElementById("msg");
+        const token = new URLSearchParams(location.search).get("token");
+        if (!token) {
+          msg.textContent = "Kein Bestätigungs-Token im Link.";
+          msg.className = "red";
+          return;
+        }
+        try {
+          const res = await fetch("/api/account/verify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || "Bestätigung fehlgeschlagen.");
+          msg.textContent = "✅ Deine E-Mail-Adresse ist jetzt bestätigt. Du kannst spielen!";
+          msg.className = "";
+        } catch (e) {
+          msg.textContent = e.message;
+          msg.className = "red";
+        }
+      })();
+    </script>
+  </body>
+</html>

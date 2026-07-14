@@ -377,6 +377,28 @@ select:focus {
   color: var(--red);
   font-weight: 600;
 }
+.banner.warn {
+  background: #3a3016;
+  color: var(--gold);
+  font-weight: 600;
+}
+.banner .link-btn {
+  color: inherit;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--gold);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  margin-left: 6px;
+  text-decoration: underline;
+}
+.warn-text {
+  color: var(--gold);
+  font-weight: 600;
+}
 
 .tabs {
   display: flex;

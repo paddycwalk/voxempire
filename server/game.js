@@ -61,6 +61,7 @@ import {
   captureOrder as ppCaptureOrder,
 } from "./paypal.js";
 import { sendToUser } from "./push.js";
+import { sendMail, mailConfigured, APP_BASE_URL } from "./mail.js";
 
 export class GameError extends Error {}
 const fail = (msg) => {
@@ -94,13 +95,63 @@ export function isAdmin(user) {
   return !!user && ADMINS.has(user.name.toLowerCase());
 }
 
+// ---------------- E-Mail: Validierung & Versand-Helfer ----------------
+
+const EMAIL_VERIFY_TTL_MS = 24 * 3_600_000; // Bestätigungslink 24 h gültig
+const EMAIL_RESET_TTL_MS = 1 * 3_600_000; // Passwort-Reset-Link 1 h gültig
+
+function normalizeEmail(e) {
+  return String(e || "")
+    .trim()
+    .toLowerCase();
+}
+function validEmail(e) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 254;
+}
+// Ist diese E-Mail bereits einem (anderen) Konto zugeordnet?
+function emailInUse(email, exceptKey) {
+  for (const [k, u] of Object.entries(db.users)) {
+    if (k !== exceptKey && normalizeEmail(u.email) === email) return true;
+  }
+  return false;
+}
+function findUserByEmail(email) {
+  for (const u of Object.values(db.users)) {
+    if (u.email && normalizeEmail(u.email) === email) return u;
+  }
+  return null;
+}
+
+// Bestätigungsmail erzeugen + verschicken. Liefert im Testmodus { testMode, url },
+// sonst { sent: true } — die URL wird dann NICHT nach außen gegeben.
+async function sendVerification(user) {
+  const token = crypto.randomBytes(24).toString("hex");
+  db.verifyTokens[token] = {
+    user: user.name.toLowerCase(),
+    exp: Date.now() + EMAIL_VERIFY_TTL_MS,
+  };
+  const url = `${APP_BASE_URL}/verify.html?token=${token}`;
+  const res = await sendMail({
+    to: user.email,
+    subject: "VOXEMPIRE — E-Mail bestätigen",
+    text: `Willkommen bei VOXEMPIRE, ${user.name}!\n\nBitte bestätige deine E-Mail-Adresse:\n${url}\n\nDer Link ist 24 Stunden gültig. Falls du dich nicht registriert hast, ignoriere diese Mail.`,
+    html: `<p>Willkommen bei VOXEMPIRE, <b>${user.name}</b>!</p><p>Bitte bestätige deine E-Mail-Adresse:</p><p><a href="${url}">E-Mail bestätigen</a></p><p style="color:#888">Der Link ist 24 Stunden gültig. Falls du dich nicht registriert hast, ignoriere diese Mail.</p>`,
+  });
+  return res.testMode ? { testMode: true, url } : { sent: true };
+}
+
 // ---------------- Accounts & Sessions ----------------
 
-export async function register(name, pass) {
+export async function register(name, pass, email) {
   name = String(name || "").trim();
   if (!/^[A-Za-z0-9_äöüÄÖÜß-]{3,16}$/.test(name))
     fail("Name: 3–16 Zeichen (Buchstaben, Zahlen, _ -).");
   if (String(pass || "").length < 4) fail("Passwort: mindestens 4 Zeichen.");
+  email = normalizeEmail(email);
+  if (!email) fail("Bitte gib eine E-Mail-Adresse an.");
+  if (!validEmail(email)) fail("Bitte gib eine gültige E-Mail-Adresse an.");
+  if (emailInUse(email, null))
+    fail("Diese E-Mail-Adresse ist bereits registriert.");
   const key = name.toLowerCase();
   if (db.users[key]) fail("Dieser Name ist bereits vergeben.");
 
@@ -111,13 +162,24 @@ export async function register(name, pass) {
     name,
     salt,
     hash,
+    email,
+    emailVerified: false,
     created: Date.now(),
     villageId: village.id,
     allianceId: null,
     reports: [],
     lastSeen: Date.now(),
   };
-  return login(name, pass);
+  // Bestätigungsmail verschicken (im Testmodus nur geloggt).
+  let verify;
+  try {
+    verify = await sendVerification(db.users[key]);
+  } catch {
+    // Versand-Fehler blockiert die Registrierung nicht — später „erneut senden".
+    verify = { failed: true };
+  }
+  const session = await login(name, pass);
+  return { ...session, email, emailVerified: false, verify };
 }
 
 export async function login(name, pass) {
@@ -166,9 +228,12 @@ export function authUser(token) {
 const STALE_ORDER_MS = 24 * 3_600_000; // nie bezahlte Bestellungen nach 24 h
 const OLD_GRANTED_MS = 30 * 24 * 3_600_000; // eingelöste Bestellungen nach 30 Tagen
 export function sweep(now = Date.now()) {
-  // 1) Abgelaufene und verwaiste Session-Tokens.
-  for (const [tok, t] of Object.entries(db.tokens)) {
-    if (t.exp < now || !db.users[t.user]) delete db.tokens[tok];
+  // 1) Abgelaufene und verwaiste Session- sowie E-Mail-/Reset-Tokens.
+  for (const map of [db.tokens, db.verifyTokens, db.resetTokens]) {
+    if (!map) continue;
+    for (const [tok, t] of Object.entries(map)) {
+      if (t.exp < now || !db.users[t.user]) delete map[tok];
+    }
   }
   // 2) Bestellungen: unbezahlte nach 24 h, eingelöste nach 30 Tagen entfernen.
   //    (Eine gelöschte Bestellung kann nicht erneut eingelöst werden — der
@@ -2869,6 +2934,10 @@ export function getState(user) {
       name: user.name,
       allianceId: user.allianceId,
       allianceTag: alliance ? alliance.tag : null,
+      email: user.email || null,
+      // Banner „E-Mail bestätigen" nur zeigen, wenn eine E-Mail hinterlegt,
+      // aber noch nicht verifiziert ist (Altkonten ohne E-Mail: kein Banner).
+      emailVerified: user.email ? user.emailVerified === true : true,
     },
     village: {
       id: v.id,
@@ -3015,6 +3084,8 @@ export function getProfile(user) {
   ).length;
   return {
     name: user.name,
+    email: user.email || null,
+    emailVerified: user.email ? user.emailVerified === true : null,
     created: user.created,
     lastSeen: user.lastSeen,
     reportCount: user.reports.length,
@@ -3057,6 +3128,8 @@ export function exportData(user) {
     exportedAt: new Date().toISOString(),
     account: {
       name: user.name,
+      email: user.email || null,
+      emailVerified: user.email ? user.emailVerified === true : null,
       created: user.created,
       lastSeen: user.lastSeen,
       xp: user.xp || 0,
@@ -3146,12 +3219,101 @@ export async function deleteAccount(user, pass) {
   delete db.friends[key];
   for (const [tok, t] of Object.entries(db.tokens))
     if (t.user === key) delete db.tokens[tok];
+  for (const [tok, t] of Object.entries(db.verifyTokens || {}))
+    if (t.user === key) delete db.verifyTokens[tok];
+  for (const [tok, t] of Object.entries(db.resetTokens || {}))
+    if (t.user === key) delete db.resetTokens[tok];
   // Hinweis Betreiber: Zahlungs-/Rechnungsdaten unterliegen ggf. gesetzlicher
   // Aufbewahrungspflicht — vor produktivem Einsatz klären (siehe APPSTORE.md).
   for (const [oid, o] of Object.entries(db.shopOrders))
     if (o.user === key) delete db.shopOrders[oid];
 
   delete db.users[key];
+}
+
+// ---------------- E-Mail: Bestätigung & Passwort-Reset ----------------
+
+// Bestätigungslink einlösen (unauth, Token stammt aus der Mail).
+export function verifyEmail(token) {
+  const rec = db.verifyTokens[String(token || "")];
+  if (!rec || rec.exp < Date.now()) {
+    if (rec) delete db.verifyTokens[token];
+    fail("Der Bestätigungslink ist ungültig oder abgelaufen.");
+  }
+  delete db.verifyTokens[token];
+  const user = db.users[rec.user];
+  if (!user) fail("Konto nicht gefunden.");
+  user.emailVerified = true;
+  return { verified: true, name: user.name };
+}
+
+// Bestätigungsmail erneut anfordern (eingeloggt).
+export async function resendVerification(user) {
+  if (!user.email) fail("Für dein Konto ist keine E-Mail hinterlegt.");
+  if (user.emailVerified) return { alreadyVerified: true };
+  return sendVerification(user);
+}
+
+// E-Mail-Adresse ändern/hinterlegen (eingeloggt). Setzt Verifizierung zurück.
+export async function changeEmail(user, email) {
+  email = normalizeEmail(email);
+  if (!validEmail(email)) fail("Bitte gib eine gültige E-Mail-Adresse an.");
+  if (emailInUse(email, user.name.toLowerCase()))
+    fail("Diese E-Mail-Adresse ist bereits registriert.");
+  user.email = email;
+  user.emailVerified = false;
+  return sendVerification(user);
+}
+
+// Passwort-Reset anfordern (unauth). Antwortet bewusst generisch, um nicht zu
+// verraten, ob eine E-Mail registriert ist (kein User-Enumeration).
+export async function requestPasswordReset(email) {
+  email = normalizeEmail(email);
+  const user = email ? findUserByEmail(email) : null;
+  if (user) {
+    const token = crypto.randomBytes(24).toString("hex");
+    db.resetTokens[token] = {
+      user: user.name.toLowerCase(),
+      exp: Date.now() + EMAIL_RESET_TTL_MS,
+    };
+    const url = `${APP_BASE_URL}/reset.html?token=${token}`;
+    try {
+      const res = await sendMail({
+        to: user.email,
+        subject: "VOXEMPIRE — Passwort zurücksetzen",
+        text: `Setze dein Passwort zurück:\n${url}\n\nDer Link ist 1 Stunde gültig. Falls du das nicht warst, ignoriere diese Mail.`,
+        html: `<p>Setze dein VOXEMPIRE-Passwort zurück:</p><p><a href="${url}">Passwort zurücksetzen</a></p><p style="color:#888">Der Link ist 1 Stunde gültig. Falls du das nicht warst, ignoriere diese Mail.</p>`,
+      });
+      // Nur im Testmodus (ohne echten Versand) den Link zurückgeben.
+      if (res.testMode) return { ok: true, testMode: true, url };
+    } catch {
+      /* Versand-Fehler nicht nach außen durchreichen (generische Antwort) */
+    }
+  }
+  return { ok: true };
+}
+
+// Passwort per Reset-Token neu setzen (unauth).
+export async function resetPassword(token, newPass) {
+  const rec = db.resetTokens[String(token || "")];
+  if (!rec || rec.exp < Date.now()) {
+    if (rec) delete db.resetTokens[token];
+    fail("Der Reset-Link ist ungültig oder abgelaufen.");
+  }
+  if (String(newPass || "").length < 4)
+    fail("Neues Passwort: mindestens 4 Zeichen.");
+  delete db.resetTokens[token];
+  const user = db.users[rec.user];
+  if (!user) fail("Konto nicht gefunden.");
+  const salt = crypto.randomBytes(16).toString("hex");
+  user.salt = salt;
+  user.hash = await hashPassword(newPass, salt);
+  // Eine erfolgreiche Reset-Mail beweist den E-Mail-Besitz → als verifiziert markieren.
+  user.emailVerified = true;
+  // Alle bestehenden Sessions beenden.
+  for (const [tok, t] of Object.entries(db.tokens))
+    if (t.user === rec.user) delete db.tokens[tok];
+  return { ok: true, name: user.name };
 }
 
 // ---------------- Push-Benachrichtigungen ----------------

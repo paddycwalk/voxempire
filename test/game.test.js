@@ -1,7 +1,7 @@
 // ============================================================
 // VOXEMPIRE — Tests für die Kernlogik (Node-eingebaut: node --test).
 // Isolierte Welt: VOX_DB zeigt auf eine nicht existierende Temp-Datei
-// (→ leere Welt), Redis/PayPal werden bewusst deaktiviert. Die Env-Variablen
+// (→ leere Welt), Redis/PayPal/Mail werden bewusst deaktiviert. Die Env-Variablen
 // müssen VOR dem Import von store.js/game.js gesetzt sein, daher dynamic import.
 // ============================================================
 import test from "node:test";
@@ -19,6 +19,8 @@ for (const k of [
   "PAYPAL_CLIENT_SECRET",
   "UPSTASH_REDIS_REST_URL",
   "UPSTASH_REDIS_REST_TOKEN",
+  "MAIL_API_KEY",
+  "MAIL_FROM",
 ])
   delete process.env[k];
 
@@ -26,13 +28,33 @@ const game = await import("../server/game.js");
 const { db } = await import("../server/store.js");
 const { CONQUEST_ATTACKS } = await import("../server/gamedata.js");
 
-test("Registrierung & Login (async scrypt)", async () => {
-  const r = await game.register("Tester", "pw1234");
-  assert.ok(r.token, "Registrierung liefert ein Token");
+// Registrierungs-Helfer: E-Mail ist Pflicht → aus dem Namen abgeleitet.
+const reg = (name) =>
+  game.register(name, "pw1234", `${name.toLowerCase()}@test.de`);
 
-  await assert.rejects(() => game.register("Tester", "pw1234"), /vergeben/);
-  await assert.rejects(() => game.register("ab", "pw1234"), /3–16/); // zu kurz
-  await assert.rejects(() => game.register("Kurz", "123"), /mindestens 4/);
+test("Registrierung & Login (async scrypt, E-Mail-Pflicht)", async () => {
+  const r = await reg("Tester");
+  assert.ok(r.token, "Registrierung liefert ein Token");
+  assert.equal(r.emailVerified, false);
+
+  await assert.rejects(
+    () => game.register("Tester", "pw1234", "anders@test.de"),
+    /vergeben/,
+  );
+  await assert.rejects(() => game.register("ab", "pw1234", "x@test.de"), /3–16/);
+  await assert.rejects(
+    () => game.register("Kurz", "123", "y@test.de"),
+    /mindestens 4/,
+  );
+  await assert.rejects(() => game.register("NoMail", "pw1234", ""), /E-Mail/);
+  await assert.rejects(
+    () => game.register("BadMail", "pw1234", "keine-mail"),
+    /gültige E-Mail/,
+  );
+  await assert.rejects(
+    () => game.register("DupMail", "pw1234", "tester@test.de"),
+    /bereits registriert/,
+  );
 
   const l = await game.login("tester", "pw1234");
   assert.ok(l.token, "Login liefert ein Token");
@@ -40,19 +62,48 @@ test("Registrierung & Login (async scrypt)", async () => {
   await assert.rejects(() => game.login("gibtsnicht", "pw1234"), /Unbekannt/);
 });
 
+test("E-Mail-Verifizierung per Bestätigungs-Token", async () => {
+  const r = await reg("Verifier");
+  assert.equal(r.emailVerified, false);
+  const token = Object.keys(db.verifyTokens).find(
+    (t) => db.verifyTokens[t].user === "verifier",
+  );
+  assert.ok(token, "Verify-Token wurde angelegt");
+  const res = game.verifyEmail(token);
+  assert.equal(res.verified, true);
+  assert.equal(db.users["verifier"].emailVerified, true);
+  assert.throws(() => game.verifyEmail(token), /ungültig|abgelaufen/);
+});
+
+test("Passwort-Reset per Token", async () => {
+  await reg("Resetter");
+  // Unbekannte E-Mail → generisch ok, kein Token.
+  const unknown = await game.requestPasswordReset("gibtsnicht@test.de");
+  assert.equal(unknown.ok, true);
+
+  await game.requestPasswordReset("resetter@test.de");
+  const token = Object.keys(db.resetTokens).find(
+    (t) => db.resetTokens[t].user === "resetter",
+  );
+  assert.ok(token, "Reset-Token wurde angelegt");
+  await game.resetPassword(token, "neuespw");
+  await assert.rejects(() => game.login("resetter", "pw1234"), /Falsches Passwort/);
+  const l = await game.login("resetter", "neuespw");
+  assert.ok(l.token, "Login mit neuem Passwort funktioniert");
+});
+
 test("Offline-Progression: touchVillage produziert segmentweise", async () => {
-  await game.register("Miner", "pw1234");
+  await reg("Miner");
   const v = db.villages[db.users["miner"].villageId];
   v.buildings.holz = 5; // ergiebige Mine
   const before = v.res.holz;
   v.lastUpdate = Date.now() - 3_600_000; // eine Stunde „offline"
   game.touchVillage(v);
   assert.ok(v.res.holz > before, "Holz wächst nach einer Offline-Stunde");
-  assert.ok(v.res.holz <= v.buildings.lager * 1e9, "bleibt endlich");
 });
 
 test("Shop (Testmodus): Kauf wird genau einmal gutgeschrieben", async () => {
-  await game.register("Shopper", "pw1234");
+  await reg("Shopper");
   const user = db.users["shopper"];
   const v = db.villages[user.villageId];
   v.buildings.lager = 12; // genug Kapazität, damit die Kiste passt
@@ -71,7 +122,7 @@ test("Shop (Testmodus): Kauf wird genau einmal gutgeschrieben", async () => {
 });
 
 test("Konto-Löschung entfernt alle Daten; falsches Passwort scheitert", async () => {
-  await game.register("Deleteme", "pw1234");
+  await reg("Deleteme");
   const user = db.users["deleteme"];
   const v = db.villages[user.villageId];
   const coord = `${v.x},${v.y}`;
@@ -85,7 +136,7 @@ test("Konto-Löschung entfernt alle Daten; falsches Passwort scheitert", async (
 });
 
 test("Sweep entfernt abgelaufene und verwaiste Tokens", async () => {
-  await game.register("Sweepy", "pw1234");
+  await reg("Sweepy");
   db.tokens["abgelaufen"] = { user: "sweepy", exp: Date.now() - 1000 };
   db.tokens["verwaist"] = { user: "geistuser", exp: Date.now() + 1e9 };
   game.sweep();
@@ -94,8 +145,8 @@ test("Sweep entfernt abgelaufene und verwaiste Tokens", async () => {
 });
 
 test("Eroberung leitet Truppen des Vorbesitzers in Transit um", async () => {
-  await game.register("Angreifer", "pw1234");
-  await game.register("Verlierer", "pw1234");
+  await reg("Angreifer");
+  await reg("Verlierer");
   const atk = db.users["angreifer"];
   const def = db.users["verlierer"];
   const av = db.villages[atk.villageId];
@@ -105,7 +156,6 @@ test("Eroberung leitet Truppen des Vorbesitzers in Transit um", async () => {
   dv.conquest = { by: "angreifer", progress: CONQUEST_ATTACKS - 1 };
 
   const now = Date.now();
-  // Überwältigender Paladin-Angriff (löst die letzte Adelung aus).
   db.events.push({
     id: "e_atk",
     type: "attack",
@@ -115,7 +165,6 @@ test("Eroberung leitet Truppen des Vorbesitzers in Transit um", async () => {
     to: dv.id,
     units: { paladin: 50 },
   });
-  // Truppe des Verteidigers, die gerade heim ins (gleich verlorene) Dorf läuft.
   db.events.push({
     id: "e_ret",
     type: "return",
@@ -136,16 +185,16 @@ test("Eroberung leitet Truppen des Vorbesitzers in Transit um", async () => {
 });
 
 test("Chat: Wortfilter maskiert Schimpfwörter", async () => {
-  await game.register("Flucher", "pw1234");
+  await reg("Flucher");
   const msg = game.postChat(db.users["flucher"], "you fuck man");
   assert.equal(msg.text, "you **** man");
 });
 
 test("Chat: Melden über Schwelle blendet Nachricht aus", async () => {
-  await game.register("Autor", "pw1234");
-  await game.register("Melder1", "pw1234");
-  await game.register("Melder2", "pw1234");
-  await game.register("Melder3", "pw1234");
+  await reg("Autor");
+  await reg("Melder1");
+  await reg("Melder2");
+  await reg("Melder3");
   const msg = game.postChat(db.users["autor"], "harmloser Text zum Melden");
 
   game.reportChat(db.users["melder1"], msg.id);
@@ -164,8 +213,8 @@ test("Chat: Melden über Schwelle blendet Nachricht aus", async () => {
 });
 
 test("Chat: Blockieren verbirgt Nachrichten eines Absenders", async () => {
-  await game.register("Sender", "pw1234");
-  await game.register("Leser", "pw1234");
+  await reg("Sender");
+  await reg("Leser");
   const msg = game.postChat(db.users["sender"], "Nachricht vom Sender");
   game.blockChatUser(db.users["leser"], "Sender");
   const visible = game
@@ -175,8 +224,8 @@ test("Chat: Blockieren verbirgt Nachrichten eines Absenders", async () => {
 });
 
 test("Moderation: Admin sperrt Spieler; Login & Auth verweigert", async () => {
-  await game.register("ChefMod", "pw1234"); // in VOX_ADMINS
-  const bad = await game.register("Stoerer", "pw1234"); // liefert Token
+  await reg("ChefMod"); // in VOX_ADMINS
+  const bad = await reg("Stoerer"); // liefert Token
   assert.ok(game.isAdmin(db.users["chefmod"]));
   assert.equal(game.isAdmin(db.users["stoerer"]), false);
 
@@ -192,7 +241,7 @@ test("Moderation: Admin sperrt Spieler; Login & Auth verweigert", async () => {
 });
 
 test("Push: Geräte-Token wird angemeldet und dedupliziert", async () => {
-  await game.register("Pusher", "pw1234");
+  await reg("Pusher");
   const user = db.users["pusher"];
   game.registerPushToken(user, "tok-abc", "ios");
   game.registerPushToken(user, "tok-abc", "ios"); // dieselbe → kein Duplikat

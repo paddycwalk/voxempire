@@ -389,17 +389,39 @@ function showAuth() {
 async function doAuth(register) {
   const name = $("#authName").value.trim();
   const pass = $("#authPass").value;
+  const email = $("#authEmail") ? $("#authEmail").value.trim() : "";
   $("#authError").textContent = "";
   try {
-    const r = await api(register ? "/api/register" : "/api/login", {
-      name,
-      pass,
-    });
+    const body = register ? { name, pass, email } : { name, pass };
+    const r = await api(register ? "/api/register" : "/api/login", body);
     token = r.token;
     localStorage.setItem("vox_token", token);
+    // Im Testmodus (kein Mail-Anbieter) liefert die Registrierung den
+    // Bestätigungslink direkt zurück, damit man ihn ohne echte Mail öffnen kann.
+    if (register && r.verify && r.verify.testMode && r.verify.url) {
+      console.log("[VOXEMPIRE] Bestätigungslink (Testmodus):", r.verify.url);
+      toast("Testmodus: Bestätigungslink in der Konsole.");
+    }
     await enterGame();
   } catch (e) {
     $("#authError").textContent = e.message;
+  }
+}
+
+// „Passwort vergessen?" — E-Mail abfragen, Reset-Link anfordern.
+async function forgotPassword() {
+  const email = prompt("E-Mail-Adresse deines Kontos:");
+  if (!email) return;
+  try {
+    const r = await api("/api/account/request-reset", { email: email.trim() });
+    if (r.testMode && r.url) {
+      console.log("[VOXEMPIRE] Reset-Link (Testmodus):", r.url);
+      toast("Testmodus: Reset-Link in der Konsole.");
+    } else {
+      toast("Falls die E-Mail registriert ist, wurde ein Reset-Link gesendet.");
+    }
+  } catch (e) {
+    toast(e.message, true);
   }
 }
 
@@ -635,7 +657,31 @@ function renderHeader() {
       next.fromOwner
     )} in ${countdown(next.at, { tag: "b" })}`;
   } else inc.classList.add("hidden");
+
+  // Hinweis, solange die hinterlegte E-Mail noch nicht bestätigt ist.
+  const mail = $("#emailBanner");
+  if (mail) {
+    if (state.user && state.user.email && state.user.emailVerified === false) {
+      mail.classList.remove("hidden");
+      mail.innerHTML = `✉️ Bitte bestätige deine E-Mail-Adresse (${esc(
+        state.user.email
+      )}). <button class="link-btn" onclick="resendVerification()">Bestätigung erneut senden</button>`;
+    } else mail.classList.add("hidden");
+  }
 }
+
+window.resendVerification = async () => {
+  try {
+    const r = await api("/api/account/resend-verification", {});
+    if (r.alreadyVerified) toast("Deine E-Mail ist bereits bestätigt.");
+    else if (r.testMode && r.url) {
+      console.log("[VOXEMPIRE] Bestätigungslink (Testmodus):", r.url);
+      toast("Testmodus: Bestätigungslink in der Konsole.");
+    } else toast("Bestätigungs-E-Mail wurde erneut gesendet.");
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
 
 // ---------------- Tabs ----------------
 
@@ -4170,6 +4216,15 @@ renderers.profil = async () => {
           )} · davon ${fmtNum(p.attackWins)} gewonnene Angriffe</td></tr>
           <tr><td>Mitglied seit</td><td>${fmtTime(p.created)}</td></tr>
           <tr><td>Zuletzt online</td><td>${fmtTime(p.lastSeen)}</td></tr>
+          <tr><td>E-Mail</td><td>${
+            p.email
+              ? `${esc(p.email)} ${
+                  p.emailVerified
+                    ? '<span class="ok">✓ bestätigt</span>'
+                    : '<span class="warn-text">nicht bestätigt</span>'
+                }`
+              : '<span class="muted">keine hinterlegt</span>'
+          }</td></tr>
         </tbody>
       </table>
     </div>
@@ -4193,6 +4248,22 @@ renderers.profil = async () => {
           <button class="btn primary" onclick="profileChangePass()">Ändern</button>
         </div>
         <p class="muted" style="margin-top:8px">Nach dem Ändern musst du dich neu einloggen.</p>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">E-Mail-Adresse</h3>
+        <div class="formrow">
+          <label>E-Mail <input id="profEmail" type="email" autocomplete="email" value="${esc(
+            p.email || ""
+          )}"></label>
+          <button class="btn primary" onclick="profileChangeEmail()">Speichern</button>
+          ${
+            p.email && !p.emailVerified
+              ? `<button class="btn" onclick="resendVerification()">Bestätigung senden</button>`
+              : ""
+          }
+        </div>
+        <p class="muted" style="margin-top:8px">Wird für Passwort-Wiederherstellung genutzt. Nach einer Änderung ist eine erneute Bestätigung nötig.</p>
       </div>
     </div>
 
@@ -4284,6 +4355,24 @@ window.profileChangePass = async () => {
   }
 };
 
+window.profileChangeEmail = async () => {
+  const email = $("#profEmail").value.trim();
+  try {
+    const r = await api("/api/account/email", { email });
+    if (r.testMode && r.url) {
+      console.log("[VOXEMPIRE] Bestätigungslink (Testmodus):", r.url);
+      toast("Gespeichert. Testmodus: Bestätigungslink in der Konsole.");
+    } else {
+      toast("E-Mail gespeichert — bitte bestätige die neue Adresse.");
+    }
+    await refreshState();
+    renderHeader();
+    renderers.profil();
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
+
 window.setSetting = (key, value) => {
   settings[key] = value;
   persistSettings();
@@ -4341,6 +4430,8 @@ $("#btnRegister").addEventListener("click", () => doAuth(true));
 $("#authPass").addEventListener("keydown", (e) => {
   if (e.key === "Enter") doAuth(false);
 });
+const btnForgot = $("#btnForgot");
+if (btnForgot) btnForgot.addEventListener("click", forgotPassword);
 $("#btnLogout").addEventListener("click", async () => {
   try {
     await api("/api/logout", {});

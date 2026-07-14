@@ -46,6 +46,8 @@ function emptyDb() {
     friendRequests: [], // { id, from, to, fromName, toName, time } (from/to = nameLower)
     shopOrders: {}, // orderId -> { user, item, price, status, test, created, ... } (Item-Shop/PayPal)
     chatReports: [], // Chat-Meldungen: { id, msgId, by, time } (by = nameLower)
+    verifyTokens: {}, // token -> { user, exp } (E-Mail-Bestätigung)
+    resetTokens: {}, // token -> { user, exp } (Passwort-Reset)
   };
 }
 

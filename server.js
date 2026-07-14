@@ -41,11 +41,24 @@ const MIME = {
 const routes = {
   "POST /api/register": {
     auth: false,
-    fn: (_, body) => game.register(body.name, body.pass),
+    fn: (_, body) => game.register(body.name, body.pass, body.email),
   },
   "POST /api/login": {
     auth: false,
     fn: (_, body) => game.login(body.name, body.pass),
+  },
+  // E-Mail-Bestätigung & Passwort-Reset (ohne Auth — Token stammt aus der Mail).
+  "POST /api/account/verify": {
+    auth: false,
+    fn: (_, b) => game.verifyEmail(b.token),
+  },
+  "POST /api/account/request-reset": {
+    auth: false,
+    fn: (_, b) => game.requestPasswordReset(b.email),
+  },
+  "POST /api/account/reset": {
+    auth: false,
+    fn: (_, b) => game.resetPassword(b.token, b.newPass),
   },
   "POST /api/logout": {
     auth: false,
@@ -166,6 +179,16 @@ const routes = {
   "POST /api/push/register": {
     auth: true,
     fn: (u, b) => game.registerPushToken(u, b.token, b.platform),
+  },
+
+  // Konto: E-Mail ändern / Bestätigung erneut senden (eingeloggt).
+  "POST /api/account/email": {
+    auth: true,
+    fn: (u, b) => game.changeEmail(u, b.email),
+  },
+  "POST /api/account/resend-verification": {
+    auth: true,
+    fn: (u) => game.resendVerification(u),
   },
 
   // Konto: Datenexport (DSGVO) und endgültige Löschung (DSGVO / Apple 5.1.1).
@@ -358,11 +381,14 @@ function pruneRateLimits(now = Date.now()) {
 // Login/Registrierung drosseln: das Passwort-Hashing ist bewusst teuer, deshalb
 // vor jeder weiteren Arbeit begrenzen. Liefert true, wenn das Limit erreicht ist.
 function authRouteLimited(req, pathname) {
-  if (pathname !== "/api/login" && pathname !== "/api/register") return false;
   const ip = clientIp(req);
-  return pathname === "/api/register"
-    ? rateLimited(`reg:${ip}`, 5, 3_600_000) // 5 neue Konten pro Stunde/IP
-    : rateLimited(`log:${ip}`, 15, 60_000); // 15 Login-Versuche pro Minute/IP
+  if (pathname === "/api/register")
+    return rateLimited(`reg:${ip}`, 5, 3_600_000); // 5 neue Konten pro Stunde/IP
+  if (pathname === "/api/login")
+    return rateLimited(`log:${ip}`, 15, 60_000); // 15 Login-Versuche pro Minute/IP
+  if (pathname === "/api/account/request-reset")
+    return rateLimited(`rst:${ip}`, 5, 3_600_000); // 5 Reset-Anfragen pro Stunde/IP
+  return false;
 }
 
 async function handleApi(req, res, url) {

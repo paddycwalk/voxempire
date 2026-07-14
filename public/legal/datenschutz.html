@@ -41,6 +41,11 @@
           <td>Art. 6 (1) b DSGVO (Vertrag)</td>
         </tr>
         <tr>
+          <td>E-Mail-Adresse (bei Registrierung; Bestätigungs- und Reset-Links)</td>
+          <td>Konto-Bestätigung &amp; Passwort-Wiederherstellung</td>
+          <td>Art. 6 (1) b DSGVO</td>
+        </tr>
+        <tr>
           <td>Spielstand (Dörfer, Rohstoffe, Truppen, Berichte, Allianz, Freunde, Chat, Rangliste)</td>
           <td>Bereitstellung des Spiels</td>
           <td>Art. 6 (1) b DSGVO</td>
@@ -85,6 +90,12 @@
         <span class="ph">[in einer JSON-Datei auf dem Server / bei Upstash Redis, Region …]</span>.
         Mit den Auftragsverarbeitern bestehen Verträge zur Auftragsverarbeitung
         (Art. 28 DSGVO).
+      </p>
+      <p>
+        Für den Versand von Bestätigungs- und Passwort-Reset-Mails wird ein
+        Transaktions-Mail-Dienstleister eingesetzt
+        (<span class="ph">[z. B. Resend / Postmark / … — tatsächlich genutzten Anbieter eintragen]</span>);
+        dabei werden E-Mail-Adresse und Nachrichteninhalt an diesen übermittelt.
       </p>
 
       <h2>5. Speicherdauer</h2>
