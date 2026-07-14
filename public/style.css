@@ -438,8 +438,17 @@ h3 {
   grid-template-columns: 1fr 1fr;
   gap: 14px;
 }
+/* Militär-Tab: Truppenbewegungen (breiter) neben Ausbildung (schmaler) */
+.grid-moves {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 14px;
+}
 @media (max-width: 800px) {
   .grid2 {
+    grid-template-columns: 1fr;
+  }
+  .grid-moves {
     grid-template-columns: 1fr;
   }
 }
@@ -660,6 +669,47 @@ th.num {
 .countdown {
   color: var(--gold);
   font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Truppenbewegungs-Tabelle ---------- */
+.move-table {
+  font-size: 13px;
+}
+.move-table th,
+.move-table td {
+  padding: 6px 8px;
+  vertical-align: top;
+}
+.move-table th {
+  font-size: 12px;
+  white-space: nowrap;
+}
+/* Gruppen-Zwischenüberschrift (Auf dem Weg / Kehren heim / …) */
+.move-table .move-section td {
+  color: var(--muted);
+  font-weight: 600;
+  background: var(--panel2);
+  padding-top: 8px;
+  padding-bottom: 4px;
+}
+.move-art {
+  white-space: nowrap;
+  font-weight: 600;
+}
+.move-support {
+  color: var(--muted);
+}
+/* Zeit in eigener Spalte, gebündelt untereinander */
+.move-time {
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+/* Aktion (Abbruch) in eigener Spalte */
+.move-action {
+  text-align: right;
+  white-space: nowrap;
 }
 
 /* ---------- Dorf: prozedurale Szene ---------- */
@@ -1106,17 +1156,6 @@ tr.unit-locked {
   font-size: 15px;
   gap: 14px;
   margin-bottom: 12px;
-}
-.bp-queue-note {
-  font-size: 13px;
-  color: var(--muted);
-  background: rgba(148, 163, 184, 0.1);
-  border-radius: 6px;
-  padding: 7px 10px;
-  margin-bottom: 12px;
-}
-.bp-queue-note b {
-  color: var(--blue);
 }
 .bp-build {
   width: 100%;

@@ -83,7 +83,7 @@ export const BUILDINGS = {
   },
   markt: {
     name: "Marktplatz",
-    desc: "Ermöglicht Handel. Pro Stufe ein weiteres aktives Angebot.",
+    desc: "Schaltet Handel schrittweise frei: Stufe 1 Basar-Tausch (3:1) und Rohstoffversand an eigene Dörfer, Stufe 3 Welthandel, Stufe 5 Allianzhandel. Pro Stufe ein weiteres aktives Angebot.",
     cost: { holz: 130, stein: 110, eisen: 90 },
     time: 45,
     max: 10,
@@ -97,6 +97,21 @@ export const BUILDINGS = {
     max: 20,
     req: { rathaus: 3 },
   },
+};
+
+// ---------- Marktplatz-Stufen ----------
+// Jede Handelsfunktion wird erst ab einer bestimmten Marktplatz-Stufe
+// freigeschaltet — so bekommt jeder Ausbau des Marktplatzes eine Bedeutung.
+export const MARKET_TIERS = {
+  // Ab Stufe 1: Basar-Soforttausch (3:1).
+  exchange: 1,
+  // Ab Stufe 1: Rohstoffe zwischen Dörfern senden UND empfangen.
+  // Ein Dorf ohne Marktplatz kann keine Lieferungen annehmen.
+  transfer: 1,
+  // Ab Stufe 3: Welthandel — eigene Angebote erstellen und fremde annehmen.
+  offers: 3,
+  // Ab Stufe 5: Allianz-interne Angebote erstellen.
+  alliance: 5,
 };
 
 // ---------- Einheiten ----------

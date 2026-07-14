@@ -81,14 +81,26 @@ export function nextId(prefix) {
 }
 
 // Speichern ist async, damit derselbe Aufruf fuer Datei und Redis passt.
+// Der Datei-Pfad schreibt nicht-blockierend (fs.promises), damit der
+// Autosave alle 15 s den Event-Loop nicht anhaelt. Ein In-Flight-Schutz
+// verhindert, dass sich zwei Schreibvorgaenge auf der tmp-Datei ueberholen.
+let saving = null;
 export async function save() {
   if (useRedis) {
     await redisCmd(["SET", REDIS_KEY, JSON.stringify(db)]);
     return;
   }
+  if (saving) await saving;
   const tmp = DB_FILE + ".tmp";
-  fs.writeFileSync(tmp, JSON.stringify(db));
-  fs.renameSync(tmp, DB_FILE);
+  saving = (async () => {
+    await fs.promises.writeFile(tmp, JSON.stringify(db));
+    await fs.promises.rename(tmp, DB_FILE);
+  })();
+  try {
+    await saving;
+  } finally {
+    saving = null;
+  }
 }
 
 export function dbFile() {

@@ -347,8 +347,10 @@ function detectCompletions(prev, next) {
     }
   }
 
-  // Anfängerschutz abgelaufen
+  // Anfängerschutz abgelaufen (nur wenn es dasselbe Dorf ist — sonst würde ein
+  // Dorfwechsel fälschlich die Meldung auslösen)
   if (
+    prev.village.id === next.village.id &&
     prev.village.protectedUntil > prev.serverTime &&
     next.village.protectedUntil <= now
   ) {
@@ -843,22 +845,13 @@ function buildingPanelHtml() {
   } else if (maxed) {
     action = `<div class="bp-maxed">✦ Maximalstufe erreicht</div>`;
   } else {
-    // Bauzeit hängt allein an der Zielstufe des Gebäudes (b.nextTime). Läuft
-    // aber bereits ein Bauauftrag, startet dieser Ausbau erst danach — daher
-    // die reale Wartezeit (Warteschlange + eigene Bauzeit) transparent machen.
-    const queueEnd = v.queue.length
-      ? Math.max(...v.queue.map((it) => Number(it.done)))
-      : serverNow();
-    const waitMs = Math.max(0, queueEnd - serverNow());
-    const queueNote =
-      waitMs > 0
-        ? `<div class="bp-queue-note">⏳ Startet nach laufendem Ausbau — fertig in <b>${fmtDur(waitMs + b.nextTime)}</b></div>`
-        : "";
+    // Parallele Bauaufträge: jedes Gebäude baut unabhängig ab dem Start mit
+    // seiner eigenen Bauzeit (b.nextTime) — keine Wartezeit hinter anderen
+    // laufenden Ausbauten.
     action = `
       <div class="bp-next">
         <div class="bp-next-head"><span>Ausbau auf Stufe ${b.level + 1}</span><span class="duration">⏱ ${fmtDur(b.nextTime)}</span></div>
         <div class="cost big">${costHtml(b.nextCost, live)}</div>
-        ${queueNote}
         <button class="btn ${afford ? "primary" : ""} bp-build" ${afford ? "" : "disabled"} onclick="actionBuild('${key}')">
           ${afford ? `🔨 Ausbauen · ⏱ ${fmtDur(b.nextTime)}` : "Nicht genug Rohstoffe"}
         </button>
@@ -947,15 +940,25 @@ function garrisonHtml() {
 // Baut das HTML der Truppenbewegungen (ein- und ausgehend) — wird im Dorf- und Militär-Tab genutzt
 function movementsHtml() {
   // Bewegungen werden nach Richtung gruppiert: "Auf dem Weg" (Hinweg) und "Kehren heim" (Rückweg).
-  // Jedes Element behält seine Ankunftszeit (at) für die spätere Sortierung.
+  // Jede Zeile ist ein Objekt mit den Tabellenspalten (Art/Anzahl/Unterstützung/Aktion)
+  // sowie der Ankunftszeit (at) für Countdown und Sortierung.
   const outgoing = []; // Auf dem Weg
   const returning = []; // Kehren heim
+
+  // Truppen-/Wachenliste als "n× Name, …" darstellen.
+  const unitList = (units) =>
+    Object.entries(units || {})
+      .map(([k, n]) => `${n}× ${meta.UNITS[k].name}`)
+      .join(", ");
 
   // Eingehende Angriffe sind immer auf dem Weg zu uns.
   for (const m of state.movements.incoming) {
     outgoing.push({
       at: m.at,
-      html: `<div class="queue-item"><span class="red">⚠️ Angriff von ${esc(m.fromOwner)} (${esc(m.fromVillage)}, ${m.x}|${m.y})</span>${countdown(m.at)}</div>`,
+      art: '<span class="red">⚠️ Angriff</span>',
+      count: `von ${esc(m.fromOwner)}<br><small class="muted">${esc(m.fromVillage)} (${m.x}|${m.y})</small>`,
+      support: "",
+      action: "",
     });
   }
 
@@ -963,102 +966,133 @@ function movementsHtml() {
     // Sammelmissionen der Bewohner (kein Truppen-, sondern Arbeiter-Einsatz)
     if (m.type === "gather" || m.type === "gatherReturn") {
       const resName = RES_NAMES[m.res] || m.res;
-      const what =
-        m.type === "gather"
-          ? `👷 Sammeln: ${m.workers}× Bewohner → ${esc(m.target)} (${m.x}|${m.y})`
-          : `↩️ Bewohner kehren heim${m.yield ? ` · +${fmtNum(m.yield)} ${resName}` : ""}`;
       // Immer die Ankunft im Dorf anzeigen (auch während des Sammelns), damit
       // nur eine durchgehende Zeit bis zur Heimkehr zu sehen ist.
       const homeAt = m.homeAt || m.at;
-      // Laufende Hinweg-/Sammelmissionen lassen sich zurückholen.
-      const recall =
-        m.type === "gather" && m.id
-          ? ` <button class="btn small danger" onclick="recallGather('${m.id}')" title="Bewohner zurückholen">✖</button>`
+      // Mitgeschickte Wachen als Unterstützung ausweisen.
+      const guards =
+        m.guards && Object.keys(m.guards).length ? unitList(m.guards) : "";
+      const support = guards ? `Unterstützung: ${guards}` : "";
+      if (m.type === "gather") {
+        // Laufende Hinweg-/Sammelmissionen lassen sich zurückholen.
+        const recall = m.id
+          ? `<button class="btn small danger" onclick="recallGather('${m.id}')" title="Bewohner zurückholen">✖</button>`
           : "";
-      const item = {
-        at: homeAt,
-        html: `<div class="queue-item"><span>${what}</span>${countdown(homeAt)}${recall}</div>`,
-      };
-      (m.type === "gatherReturn" ? returning : outgoing).push(item);
+        outgoing.push({
+          at: homeAt,
+          art: "👷 Sammeln",
+          count: `${m.workers}× Bewohner<br><small class="muted">→ ${esc(m.target)} (${m.x}|${m.y})</small>`,
+          support,
+          action: recall,
+        });
+      } else {
+        returning.push({
+          at: homeAt,
+          art: "↩️ Rückkehr",
+          count: `Bewohner${m.yield ? `<br><small class="muted">+${fmtNum(m.yield)} ${resName}</small>` : ""}`,
+          support,
+          action: "",
+        });
+      }
       continue;
     }
     // Rohstofftransport zwischen eigenen Dörfern (trägt Rohstoffe statt Truppen)
     if (m.type === "transport") {
       const load = costHtml(m.res || {});
-      const what =
+      const dest =
         m.dir === "in"
-          ? `🛒 Rohstoffe von ${esc(m.target)} (${m.x}|${m.y})`
-          : `🛒 Rohstoffe nach ${esc(m.target)} (${m.x}|${m.y})`;
+          ? `von ${esc(m.target)}`
+          : `nach ${esc(m.target)}`;
       outgoing.push({
         at: m.at,
-        html: `<div class="queue-item"><span>${what} — ${load}</span>${countdown(m.at)}</div>`,
+        art: "🛒 Transport",
+        count: `${dest} (${m.x}|${m.y})<br><small class="muted">${load}</small>`,
+        support: "",
+        action: "",
       });
       continue;
     }
-    const units = Object.entries(m.units)
-      .map(([k, n]) => `${n}× ${meta.UNITS[k].name}`)
-      .join(", ");
-    const what =
-      m.type === "attack"
-        ? `⚔️ Angriff auf ${esc(m.target)} (${m.x}|${m.y})`
-        : m.type === "scout"
-          ? `🔍 Spähen von ${esc(m.target)} (${m.x}|${m.y})`
-          : m.type === "explore"
-            ? `🧭 Erkundung (${m.x}|${m.y})`
-            : m.type === "reinforce"
-              ? `🤝 Verstärkung nach ${esc(m.target)} (${m.x}|${m.y})`
-              : `↩️ Rückkehr von ${esc(m.target)}`;
-    const loot = m.loot ? ` · Beute: ${costHtml(m.loot)}` : "";
+    const units = unitList(m.units);
+    const artMap = {
+      attack: "⚔️ Angriff",
+      scout: "🔍 Spähen",
+      explore: "🧭 Erkundung",
+      reinforce: "🤝 Verstärkung",
+      return: "↩️ Rückkehr",
+    };
+    const dest =
+      m.type === "explore"
+        ? `(${m.x}|${m.y})`
+        : m.type === "return"
+          ? `von ${esc(m.target)}`
+          : `→ ${esc(m.target)} (${m.x}|${m.y})`;
+    const loot = m.loot
+      ? `<br><small class="muted">Beute: ${costHtml(m.loot)}</small>`
+      : "";
     const cancel =
       (m.type === "attack" || m.type === "scout") && m.id
-        ? ` <button class="btn small danger" onclick="cancelMove('${m.id}')" title="Zurückbeordern">✖</button>`
+        ? `<button class="btn small danger" onclick="cancelMove('${m.id}')" title="Zurückbeordern">✖</button>`
         : "";
     const item = {
       at: m.at,
-      html: `<div class="queue-item"><span>${what} — ${units}${loot}</span>${countdown(m.at)}${cancel}</div>`,
+      art: artMap[m.type] || m.type,
+      count: `${units}<br><small class="muted">${dest}</small>${loot}`,
+      support: "",
+      action: cancel,
     };
     // "return" ist der Rückweg, alles andere (attack/scout/reinforce) ist der Hinweg.
     (m.type === "return" ? returning : outgoing).push(item);
   }
 
-  // Nach Ankunftszeit absteigend sortieren (späteste Ankunft zuerst).
-  const bySoonestDesc = (a, b) => b.at - a.at;
-  const section = (title, items) =>
-    items.length
-      ? `<div class="muted" style="margin:8px 0 4px;font-weight:600">${title}</div>` +
-        items
-          .sort(bySoonestDesc)
-          .map((i) => i.html)
-          .join("")
-      : "";
-  const outHtml = section("🏃 Auf dem Weg", outgoing);
-  const retHtml = section("🏠 Kehren heim", returning);
-
   // Eigene Truppen, die in fremden Dörfern stationiert sind (mit Rückruf).
-  const stationed = (state.village.stationed || [])
-    .map((s) => {
-      const units = Object.entries(s.units)
-        .map(([k, n]) => `${n}× ${meta.UNITS[k].name}`)
-        .join(", ");
-      return `<div class="queue-item"><span>🤝 Verstärkt ${esc(s.target)} (${s.x}|${s.y}, ${esc(s.owner)}) — ${units}</span>
-        <button class="btn small" onclick="recallReinforce('${s.targetId}','${s.fromId}')" title="Zurückbeordern">↩️ Rückruf</button></div>`;
-    })
-    .join("");
+  const stationed = (state.village.stationed || []).map((s) => ({
+    at: null,
+    art: "🤝 Verstärkt",
+    count: `${esc(s.target)} (${s.x}|${s.y})<br><small class="muted">${esc(s.owner)} · ${unitList(s.units)}</small>`,
+    support: "",
+    action: `<button class="btn small" onclick="recallReinforce('${s.targetId}','${s.fromId}')" title="Zurückbeordern">↩️</button>`,
+  }));
 
   // Fremde Verstärkung, die aktuell in diesem Dorf steht.
-  const present = (state.village.reinforcements || [])
-    .map((r) => {
-      const units = Object.entries(r.units)
-        .map(([k, n]) => `${n}× ${meta.UNITS[k].name}`)
-        .join(", ");
-      return `<div class="queue-item"><span>🛡️ Verstärkung von ${esc(r.owner)} (${esc(r.fromVillage)}) — ${units}</span></div>`;
-    })
-    .join("");
+  const present = (state.village.reinforcements || []).map((r) => ({
+    at: null,
+    art: "🛡️ Verstärkung",
+    count: `von ${esc(r.owner)}<br><small class="muted">${esc(r.fromVillage)} · ${unitList(r.units)}</small>`,
+    support: "",
+    action: "",
+  }));
 
-  return (
-    outHtml + retHtml + stationed + present ||
-    '<p class="muted">Keine Bewegungen.</p>'
-  );
+  // Nach Ankunftszeit absteigend sortieren (späteste Ankunft zuerst).
+  const bySoonestDesc = (a, b) => b.at - a.at;
+  const rowsHtml = (items) =>
+    items
+      .map(
+        (i) => `<tr>
+          <td class="move-art">${i.art}</td>
+          <td class="move-count">${i.count}</td>
+          <td class="move-support">${i.support}</td>
+          <td class="move-time">${i.at ? countdown(i.at) : ""}</td>
+          <td class="move-action">${i.action}</td>
+        </tr>`,
+      )
+      .join("");
+  const section = (title, items, sort = true) =>
+    items.length
+      ? `<tr class="move-section"><td colspan="5">${title}</td></tr>` +
+        rowsHtml(sort ? items.sort(bySoonestDesc) : items)
+      : "";
+
+  const body =
+    section("🏃 Auf dem Weg", outgoing) +
+    section("🏠 Kehren heim", returning) +
+    section("🏰 Stationiert", stationed, false) +
+    section("🛡️ Verstärkung im Dorf", present, false);
+
+  if (!body) return '<p class="muted">Keine Bewegungen.</p>';
+  return `<table class="move-table">
+    <thead><tr><th>Art</th><th>Anzahl</th><th>Unterstützung</th><th>Zeit</th><th></th></tr></thead>
+    <tbody>${body}</tbody>
+  </table>`;
 }
 
 // Baut nur die Bauschleife (rechte Spalte)
@@ -1285,7 +1319,7 @@ renderers.militaer = () => {
   $("#tab-militaer").innerHTML = `
     <h2>Militär</h2>
     ${v.buildings.kaserne.level < 1 ? '<div class="card"><p class="muted">⚠️ Baue zuerst eine <b>Kaserne</b>, um Truppen auszubilden.</p></div>' : ""}
-    <div class="grid2">
+    <div class="grid-moves">
       <div class="card"><h3 style="margin-top:0">Truppenbewegungen</h3>${movementsHtml()}</div>
       <div class="card"><h3 style="margin-top:0">Ausbildung</h3>${tq}</div>
     </div>
@@ -1529,6 +1563,9 @@ function renderVillageDetail() {
     attackForm = isActive
       ? '<p class="muted">Das ist dein aktives Dorf.</p>'
       : '<p class="muted">Das ist eines deiner Dörfer. Du kannst es verstärken.</p>';
+  } else if (ally) {
+    attackForm =
+      '<p class="muted">🤝 Dieses Dorf gehört einem Allianzmitglied. Du kannst es unterstützen.</p>';
   } else if (t.protected) {
     attackForm =
       '<p class="muted">🛡️ Dieser Spieler steht unter Anfängerschutz und kann nicht angegriffen werden.</p>';
@@ -2021,6 +2058,17 @@ function renderMarket(offers) {
   const resOpts = ["holz", "stein", "eisen"]
     .map((r) => `<option value="${r}">${RES_NAMES[r]}</option>`)
     .join("");
+  const tiers = (meta && meta.MARKET_TIERS) || {
+    exchange: 1,
+    transfer: 1,
+    offers: 3,
+    alliance: 5,
+  };
+  const mLvl = state.village.buildings.markt.level;
+  const canExchange = mLvl >= tiers.exchange;
+  const canTrade = mLvl >= tiers.offers;
+  const canAlliance = mLvl >= tiers.alliance;
+
   const rows = offers.length
     ? offers
         .map((o) => {
@@ -2037,17 +2085,16 @@ function renderMarket(offers) {
         <td>${
           mine
             ? `<button class="btn small danger" onclick="marketAction('cancel','${o.id}')">Zurückziehen</button>`
-            : `<button class="btn small primary" onclick="marketAction('accept','${o.id}','${o.scope || "world"}')">Annehmen</button>`
+            : `<button class="btn small primary" onclick="marketAction('accept','${o.id}','${o.scope || "world"}')" ${canTrade ? "" : "disabled"}>Annehmen</button>`
         }</td>
       </tr>`;
         })
         .join("")
     : '<tr><td colspan="4" class="muted">Keine Angebote. Erstelle das erste!</td></tr>';
 
-  el.innerHTML = `
-    <h2>Marktplatz</h2>
-    ${state.village.buildings.markt.level < 1 ? '<div class="card"><p class="muted">⚠️ Baue zuerst einen <b>Marktplatz</b>, um eigene Angebote zu erstellen. Annehmen geht immer.</p></div>' : ""}
-    ${transportCardHtml()}
+  // Basar-Soforttausch — ab Marktplatz-Stufe tiers.exchange.
+  const exchangeCard = canExchange
+    ? `
     <div class="card">
       <h3 style="margin-top:0">Sofort-Tausch</h3>
       <p class="muted">Tausch beim Basar — geht immer, aber zum Kurs <b>3:1</b> (du zahlst das Dreifache).</p>
@@ -2057,7 +2104,13 @@ function renderMarket(offers) {
         <label>Menge <input id="exWantAmt" type="number" min="1" value="100" style="width:90px"></label>
         <button class="btn" onclick="marketAction('exchange')">Tauschen</button>
       </div>
-    </div>
+    </div>`
+    : `
+    <div class="card"><p class="muted">⚠️ Baue einen <b>Marktplatz</b> (Stufe ${tiers.exchange}), um den Basar-Soforttausch (3:1) zu nutzen.</p></div>`;
+
+  // Welthandel (Angebote erstellen + Angebotsliste) — ab Stufe tiers.offers.
+  const tradeCard = canTrade
+    ? `
     <div class="card">
       <h3 style="margin-top:0">Neues Angebot</h3>
       <div class="formrow">
@@ -2066,21 +2119,38 @@ function renderMarket(offers) {
         <label>Ich möchte <select id="wantRes">${resOpts}</select></label>
         <label>Menge <input id="wantAmt" type="number" min="1" value="100" style="width:90px"></label>
         ${
-          state.user.allianceTag
+          canAlliance && state.user.allianceTag
             ? `<label>Sichtbar für <select id="offerScope"><option value="world">Alle Spieler</option><option value="alliance">Nur Allianz [${esc(state.user.allianceTag)}]</option></select></label>`
             : ""
         }
         <button class="btn primary" onclick="marketAction('create')">Anbieten</button>
       </div>
+      ${
+        state.user.allianceTag && !canAlliance
+          ? `<p class="muted">🛡️ Allianz-interne Angebote ab Marktplatz-Stufe ${tiers.alliance}.</p>`
+          : ""
+      }
     </div>
     <div class="card">
       <table>
         <thead><tr><th>Anbieter</th><th>Bietet</th><th>Möchte</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>`;
-  $("#wantRes").value = "stein";
-  $("#exWantRes").value = "stein";
+    </div>`
+    : `
+    <div class="card"><p class="muted">🌍 <b>Welthandel</b> (eigene Angebote erstellen und fremde annehmen) ab Marktplatz-Stufe ${tiers.offers}. Baue deinen Marktplatz weiter aus.</p></div>`;
+
+  el.innerHTML = `
+    <h2>Marktplatz${mLvl > 0 ? ` <small class="muted">Stufe ${mLvl}</small>` : ""}</h2>
+    ${transportCardHtml()}
+    ${exchangeCard}
+    ${tradeCard}`;
+  if (canTrade) {
+    $("#wantRes").value = "stein";
+  }
+  if (canExchange) {
+    $("#exWantRes").value = "stein";
+  }
 }
 
 // Karte zum Verschicken von Rohstoffen an ein eigenes weiteres Dorf.
@@ -2088,16 +2158,20 @@ function renderMarket(offers) {
 function transportCardHtml() {
   const others = (state.villages || []).filter((v) => !v.active);
   if (others.length < 1) return "";
+  const tiers = (meta && meta.MARKET_TIERS) || { transfer: 1 };
   const opts = others
     .map(
-      (v) => `<option value="${v.id}">${esc(v.name)} (${v.x}|${v.y})</option>`,
+      (v) =>
+        `<option value="${v.id}"${v.hasMarket === false ? " disabled" : ""}>${esc(v.name)} (${v.x}|${v.y})${v.hasMarket === false ? " — kein Marktplatz" : ""}</option>`,
     )
     .join("");
-  const canSend = state.village.buildings.markt.level >= 1;
+  const canSend = state.village.buildings.markt.level >= tiers.transfer;
+  const anyBlocked = others.some((v) => v.hasMarket === false);
   return `
     <div class="card">
       <h3 style="margin-top:0">Rohstoffe an eigenes Dorf schicken</h3>
       ${canSend ? '<p class="muted">Ein Handelskarren bringt die Rohstoffe zu einem deiner anderen Dörfer. Reisezeit hängt von der Entfernung ab.</p>' : '<p class="muted">⚠️ Baue zuerst einen <b>Marktplatz</b>, um Rohstoffe verschicken zu können.</p>'}
+      ${canSend && anyBlocked ? '<p class="muted">ℹ️ Nur Dörfer <b>mit Marktplatz</b> können Lieferungen empfangen.</p>' : ""}
       <div class="formrow">
         <label>Zieldorf <select id="trTarget">${opts}</select></label>
         <label>${RES_NAMES.holz} <input id="trHolz" type="number" min="0" value="0" style="width:80px"></label>
@@ -3259,6 +3333,43 @@ window.shopBuyTest = async (itemId) => {
 // Neue Einträge oben ergänzen. Typen: "feature", "fix", "balance", "improvement".
 const CHANGELOG = [
   {
+    version: "0.6.6",
+    date: "2026-07-14",
+    title: "Truppenbewegungen als Übersichtstabelle",
+    changes: [
+      {
+        type: "improvement",
+        text: "Die Truppenbewegungen im Militär-Tab werden jetzt als übersichtliche Tabelle (Art, Anzahl, Unterstützung, Zeit, Aktion) dargestellt — inklusive stationierter eigener Truppen und fremder Verstärkung im Dorf.",
+      },
+    ],
+  },
+  {
+    version: "0.6.5",
+    date: "2026-07-14",
+    title: "Marktplatz-Stufen schalten Handel frei",
+    changes: [
+      {
+        type: "feature",
+        text: "Der Marktplatz wird jetzt stufenweise wichtiger: Stufe 1 schaltet den Basar-Soforttausch (3:1) und den Rohstoffversand zwischen eigenen Dörfern frei, Stufe 3 den Welthandel (Angebote erstellen und annehmen) und Stufe 5 die Allianz-internen Angebote.",
+      },
+      {
+        type: "balance",
+        text: "Ein Dorf kann Rohstoff-Lieferungen nur noch empfangen, wenn es selbst einen Marktplatz besitzt — egal ob die Karre von einem eigenen Dorf oder von jemand anderem kommt. Lieferungen an ein Dorf ohne Marktplatz kehren komplett zum Absender zurück.",
+      },
+    ],
+  },
+  {
+    version: "0.6.4",
+    date: "2026-07-14",
+    title: "Gebäude bauen jetzt parallel",
+    changes: [
+      {
+        type: "fix",
+        text: "Ein billiges Gebäude wartet nicht mehr hinter einem teuren Ausbau: Jeder Bauauftrag läuft unabhängig mit seiner eigenen Bauzeit. Ein 20-Sekunden-Ausbau ist nach 20 Sekunden fertig, auch wenn parallel ein 30-Minuten-Gebäude gebaut wird.",
+      },
+    ],
+  },
+  {
     version: "0.6.3",
     date: "2026-07-09",
     title: "Dorf-Wechsel-Dropdown überarbeitet",
@@ -3538,9 +3649,12 @@ window.setSetting = (key, value) => {
 
 // ---------------- Lokaler Sekunden-Tick ----------------
 // Countdowns runterzählen und Rohstoffe hochzählen, ohne Server-Roundtrip.
+// Ist der Tab im Hintergrund (document.hidden), wird der Tick übersprungen —
+// er würde nur unnötig DOM aktualisieren. Beim Zurückkehren holen wir sofort
+// frischen Stand und rendern neu.
 
 setInterval(() => {
-  if (!state) return;
+  if (!state || document.hidden) return;
   let expired = false;
   document.querySelectorAll(".countdown").forEach((el) => {
     const remaining = Number(el.dataset.done) - serverNow();
@@ -3555,6 +3669,16 @@ setInterval(() => {
       .catch(() => {});
   }
 }, 1000);
+
+// Rückkehr aus dem Hintergrund: sofort aktualisieren, statt bis zum nächsten
+// Poll zu warten (der Stand kann sekunden- bis minutenalt sein).
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && state) {
+    refreshState()
+      .then(renderActiveTabIfCheap)
+      .catch(() => {});
+  }
+});
 
 function renderHeaderResourcesOnly() {
   const cap = fmtNum(state.village.storage);

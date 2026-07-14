@@ -26,6 +26,7 @@ import {
   RES_NAMES,
   BUILDINGS,
   UNITS,
+  MARKET_TIERS,
   buildCost,
   buildTimeMs,
   prodPerHour,
@@ -495,13 +496,14 @@ export function build(user, key) {
   const cost = buildCost(key, toLevel);
   if (!canAfford(v, cost)) fail("Nicht genügend Rohstoffe.");
   pay(v, cost);
-  const start = v.queue.length
-    ? Math.max(...v.queue.map((q) => q.done))
-    : Date.now();
+  // Parallele Bauaufträge: jedes Gebäude baut unabhängig ab jetzt mit seiner
+  // eigenen Bauzeit — ein billiges Gebäude wartet nicht auf einen teuren
+  // Ausbau. (Mehrfach-Ausbau desselben Gebäudes bleibt korrekt, weil höhere
+  // Stufen stets länger dauern und damit später fertig werden.)
   v.queue.push({
     b: key,
     toLevel,
-    done: start + buildTimeMs(key, toLevel, v.buildings.rathaus),
+    done: Date.now() + buildTimeMs(key, toLevel, v.buildings.rathaus),
   });
 }
 
@@ -855,11 +857,16 @@ export function recallReinforcement(user, targetId, fromId) {
 export function sendResources(user, targetId, resCounts) {
   const v = db.villages[user.villageId];
   touchVillage(v);
-  if (v.buildings.markt < 1) fail("Du brauchst zuerst einen Marktplatz.");
+  if (v.buildings.markt < MARKET_TIERS.transfer)
+    fail("Du brauchst zuerst einen Marktplatz.");
   const target = db.villages[targetId] || fail("Zieldorf existiert nicht.");
   if (target.id === v.id) fail("Ziel- und Herkunftsdorf sind identisch.");
   if (target.owner !== user.name.toLowerCase())
     fail("Rohstoffe kannst du nur an deine eigenen Dörfer schicken.");
+  if ((target.buildings.markt || 0) < MARKET_TIERS.transfer)
+    fail(
+      `${target.name} hat keinen Marktplatz und kann keine Rohstoffe empfangen.`,
+    );
   touchVillage(target);
 
   const load = {};
@@ -1332,6 +1339,46 @@ function resolveTransport(ev, now) {
   const to = db.villages[ev.to];
   if (!to) return; // Ziel verschwunden (z. B. erobert) — Ladung verfällt
   touchVillage(to, now);
+
+  // Empfangssperre: Ein Dorf ohne Marktplatz kann keine Rohstoff-Lieferungen
+  // annehmen. Die komplette Ladung kehrt zum Absender zurück. Eine bereits
+  // zurückgeschickte Karre wird nicht erneut gebounct (kein Endlos-Pendeln,
+  // damit der Absender seine eigenen Rohstoffe nicht verliert).
+  if (!ev.bounced && (to.buildings.markt || 0) < MARKET_TIERS.transfer) {
+    const from = db.villages[ev.from];
+    if (from && from.id !== to.id) {
+      const backDist = Math.hypot(to.x - from.x, to.y - from.y);
+      db.events.push({
+        id: nextId("e"),
+        type: "transport",
+        at: now + transportTimeMs(backDist),
+        start: now,
+        from: to.id,
+        to: from.id,
+        owner: ev.owner,
+        res: ev.res,
+        bounced: true, // Rücklieferung: Zieldorf hat keinen Marktplatz
+      });
+    }
+    const sender = db.users[ev.owner];
+    if (sender) {
+      addReport(sender, {
+        time: now,
+        kind: "Transport",
+        title: `⚠️ ${to.name} hat keinen Marktplatz — Ladung kehrt zurück`,
+        target: to.name,
+        x: to.x,
+        y: to.y,
+        from: from ? from.name : "?",
+        res: {},
+        returned: ev.res,
+        stock: resSnapshot(to),
+        villageId: ev.from,
+      });
+    }
+    return;
+  }
+
   const cap = storageCap(to.buildings.lager);
   const delivered = {};
   const overflow = {};
@@ -1534,8 +1581,15 @@ function resSnapshot(v) {
 export function marketCreate(user, give, want, scope = "world") {
   const v = db.villages[user.villageId];
   touchVillage(v);
-  if (v.buildings.markt < 1) fail("Du brauchst zuerst einen Marktplatz.");
+  if (v.buildings.markt < MARKET_TIERS.offers)
+    fail(
+      `Welthandel erst ab Marktplatz Stufe ${MARKET_TIERS.offers}. Baue deinen Marktplatz weiter aus.`,
+    );
   const allianceOnly = scope === "alliance";
+  if (allianceOnly && v.buildings.markt < MARKET_TIERS.alliance)
+    fail(
+      `Allianz-interne Angebote erst ab Marktplatz Stufe ${MARKET_TIERS.alliance}.`,
+    );
   if (allianceOnly && !user.allianceId)
     fail("Nur als Allianzmitglied kannst du interne Angebote erstellen.");
   const mine = db.market.filter(
@@ -1588,6 +1642,10 @@ export function marketAccept(user, offerId) {
   const seller = db.villages[sellerUser.villageId];
   touchVillage(buyer);
   touchVillage(seller);
+  if (buyer.buildings.markt < MARKET_TIERS.offers)
+    fail(
+      `Welthandel erst ab Marktplatz Stufe ${MARKET_TIERS.offers}. Baue deinen Marktplatz weiter aus.`,
+    );
   if (buyer.res[offer.want.res] < offer.want.amount)
     fail("Nicht genügend Rohstoffe zum Kauf.");
   buyer.res[offer.want.res] -= offer.want.amount;
@@ -1731,6 +1789,8 @@ export const EXCHANGE_RATE = 3;
 export function marketExchange(user, giveRes, wantRes, wantAmount) {
   const v = db.villages[user.villageId];
   touchVillage(v);
+  if (v.buildings.markt < MARKET_TIERS.exchange)
+    fail("Du brauchst zuerst einen Marktplatz für den Basar-Tausch.");
   giveRes = String(giveRes);
   wantRes = String(wantRes);
   const want = Math.floor(Number(wantAmount));
@@ -2624,9 +2684,11 @@ export function getState(user) {
           y: vv.y,
           points: villagePoints(vv),
           active: vv.id === v.id,
+          // Kann dieses Dorf Rohstoff-Lieferungen empfangen? (Marktplatz nötig)
+          hasMarket: (vv.buildings.markt || 0) >= MARKET_TIERS.transfer,
         };
       })
-      .sort((a, b) => b.points - a.points),
+      .sort((a, b) => a.name.localeCompare(b.name)),
     movements: { incoming, outgoing },
     unreadReports: user.reports.filter((r) => !r.read).length,
     pendingFriendRequests: db.friendRequests.filter(

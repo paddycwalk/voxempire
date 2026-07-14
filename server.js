@@ -13,6 +13,7 @@ import {
   BUILDINGS,
   UNITS,
   WORLD_SIZE,
+  MARKET_TIERS,
   WORKER_SPEED,
   CONQUEST_ATTACKS,
   gatherWorkMs,
@@ -61,6 +62,7 @@ const routes = {
       UNITS,
       SPEED,
       WORLD_SIZE,
+      MARKET_TIERS,
       CONQUEST_ATTACKS,
       GATHER: {
         workerSpeedEff: WORKER_SPEED * SPEED,
