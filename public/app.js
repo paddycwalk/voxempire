@@ -475,8 +475,12 @@ function renderVillageSelect() {
   }
 
   const active = villages.find((vv) => vv.active) || villages[0];
-  btn.innerHTML = `🏰 ${esc(active.name)} <span class="vs-caret">▾</span>`;
-  btn.title = `${active.name} (${active.x}|${active.y}) – Dorf wechseln`;
+  btn.innerHTML = `${active.main ? "👑" : "🏰"} ${esc(
+    active.name
+  )} <span class="vs-caret">▾</span>`;
+  btn.title = `${active.name} (${active.x}|${active.y})${
+    active.main ? " – Hauptdorf" : ""
+  } – Dorf wechseln`;
 
   // Menüinhalt nur neu aufbauen, wenn sich die Dörferliste geändert hat.
   const sig = villages
@@ -489,9 +493,11 @@ function renderVillageSelect() {
         (vv) =>
           `<button type="button" class="vs-item${
             vv.active ? " active" : ""
-          }" role="option" data-id="${vv.id}">🏰 ${esc(vv.name)}${
-            vv.main ? ' <span class="vs-main" title="Hauptdorf">👑</span>' : ""
-          } <small>(${vv.x}|${vv.y})</small></button>`
+          }" role="option" data-id="${vv.id}" title="${
+            vv.main ? "Hauptdorf" : ""
+          }">${vv.main ? "👑" : "🏰"} ${esc(
+            vv.name
+          )} <small>(${vv.x}|${vv.y})</small></button>`
       )
       .join("");
     menu.querySelectorAll(".vs-item").forEach((el) => {

@@ -167,6 +167,7 @@ function createVillage(ownerName) {
     residentsLost: 0, // gefallene Bewohner, werden im Rathaus nachgezogen
     residentsRegenAt: Date.now(), // Zeitstempel, ab dem der nächste Bewohner nachwächst
     garrison: {}, // stationierte Verstärkung fremder Dörfer: { [fromVillageId]: { owner, units } }
+    home: true, // vom aktuellen Besitzer gegründetes Startdorf (Hauptdorf); bei Eroberung false
   };
   db.villages[id] = village;
   db.world[`${x},${y}`] = id;
@@ -1116,6 +1117,7 @@ function conquerVillage(av, dv, defenderUser, now) {
   const attacker = db.users[av.owner];
   dv.owner = attacker.name.toLowerCase();
   dv.conquest = null;
+  dv.home = false; // erobertes Dorf ist für den neuen Besitzer kein Hauptdorf
   dv.protectedUntil = now + PROTECTION_MS; // Frisch erobertes Dorf erhält 24 h Schutz
   if (defenderUser.villageId === dv.id) {
     const remaining = ownedVillages(defenderUser);
@@ -2684,12 +2686,21 @@ export function getState(user) {
     },
     villages: (() => {
       const owned = ownedVillages(user);
-      // Hauptdorf = zuerst gegründetes eigenes Dorf (kleinste numerische ID).
+      // Hauptdorf = das vom Spieler selbst gegründete Startdorf (home === true).
+      // Eroberte Dörfer sind nie das Hauptdorf, auch wenn sie eine kleinere ID
+      // haben (sie wurden ursprünglich von einem anderen Spieler gegründet).
       const idNum = (id) => parseInt(String(id).replace(/\D/g, ""), 10) || 0;
-      const mainId = owned.reduce(
-        (min, vv) => (min === null || idNum(vv.id) < idNum(min) ? vv.id : min),
-        null
-      );
+      let mainVillage = owned.find((vv) => vv.home === true);
+      if (!mainVillage && owned.length) {
+        // Migration für Alt-Spielstände ohne home-Flag: Startdorf am
+        // Standard-Dorfnamen erkennen, sonst das älteste eigene Dorf nehmen.
+        const defaultName = `${user.name}s Dorf`;
+        mainVillage =
+          owned.find((vv) => vv.home == null && vv.name === defaultName) ||
+          owned.slice().sort((a, b) => idNum(a.id) - idNum(b.id))[0];
+        if (mainVillage) mainVillage.home = true; // einmalig persistieren
+      }
+      const mainId = mainVillage ? mainVillage.id : null;
       return owned
         .map((vv) => {
           touchVillage(vv, now);
