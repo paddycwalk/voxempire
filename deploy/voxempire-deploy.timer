@@ -1,0 +1,17 @@
+# systemd-Timer: prueft alle 2 Minuten auf neuen Code und deployt bei Bedarf.
+# Aktivieren (als root):
+#   systemctl enable --now voxempire-deploy.timer
+# Status/Log:
+#   systemctl list-timers voxempire-deploy.timer
+#   journalctl -u voxempire-deploy.service -f
+
+[Unit]
+Description=VOXEMPIRE Auto-Deploy alle 2 Minuten
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+Unit=voxempire-deploy.service
+
+[Install]
+WantedBy=timers.target

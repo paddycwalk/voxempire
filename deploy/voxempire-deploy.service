@@ -1,0 +1,16 @@
+# systemd-Service fuer den VOXEMPIRE Auto-Deploy.
+# Wird vom Timer voxempire-deploy.timer angestossen (nicht direkt aktivieren).
+# Installation (als root):
+#   cp /opt/voxempire/deploy/voxempire-deploy.service /etc/systemd/system/
+#   cp /opt/voxempire/deploy/voxempire-deploy.timer   /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now voxempire-deploy.timer
+
+[Unit]
+Description=VOXEMPIRE Auto-Deploy (git pull + Restart bei Aenderungen)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash /opt/voxempire/deploy/auto-deploy.sh
