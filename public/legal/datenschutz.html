@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Datenschutzerklärung — VOXEMPIRE</title>
+    <link rel="stylesheet" href="_legal.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <a class="back" href="/">← Zurück zum Spiel</a>
+
+      <div class="tpl-warning">
+        <b>⚠️ Mustervorlage — noch nicht rechtsgültig.</b> Alle
+        <span class="ph">[…]</span>-Felder ausfüllen und die Angaben an die
+        tatsächlich eingesetzten Dienste (Hosting, Zahlung, Analyse) anpassen.
+        Keine Rechtsberatung — vor Veröffentlichung / App-Store-Einreichung
+        fachkundig prüfen lassen. Apple verlangt eine erreichbare
+        Datenschutzerklärung sowie korrekte „App-Datenschutz"-Angaben
+        (Privacy Nutrition Labels) im App Store Connect.
+      </div>
+
+      <h1>Datenschutzerklärung</h1>
+
+      <h2>1. Verantwortlicher</h2>
+      <p>
+        Verantwortlich im Sinne der DSGVO:<br />
+        <span class="ph">[FIRMA / NAME]</span>, <span class="ph">[ANSCHRIFT]</span>,
+        <span class="ph">[KONTAKT-E-MAIL]</span>. Siehe auch
+        <a href="/legal/impressum.html">Impressum</a>.
+      </p>
+
+      <h2>2. Welche Daten wir verarbeiten</h2>
+      <table>
+        <tr>
+          <th>Daten</th><th>Zweck</th><th>Rechtsgrundlage</th>
+        </tr>
+        <tr>
+          <td>Spielername, Passwort (nur als <b>scrypt-Hash</b>, niemals im Klartext)</td>
+          <td>Kontoerstellung &amp; Login</td>
+          <td>Art. 6 (1) b DSGVO (Vertrag)</td>
+        </tr>
+        <tr>
+          <td>E-Mail-Adresse (bei Registrierung; Bestätigungs- und Reset-Links)</td>
+          <td>Konto-Bestätigung &amp; Passwort-Wiederherstellung</td>
+          <td>Art. 6 (1) b DSGVO</td>
+        </tr>
+        <tr>
+          <td>Spielstand (Dörfer, Rohstoffe, Truppen, Berichte, Allianz, Freunde, Chat, Rangliste)</td>
+          <td>Bereitstellung des Spiels</td>
+          <td>Art. 6 (1) b DSGVO</td>
+        </tr>
+        <tr>
+          <td>IP-Adresse (temporär, zur Missbrauchs-/Brute-Force-Abwehr &amp; in Server-Logs)</td>
+          <td>Sicherheit, Stabilität</td>
+          <td>Art. 6 (1) f DSGVO (berechtigtes Interesse)</td>
+        </tr>
+        <tr>
+          <td>Zeitpunkt der letzten Aktivität (<i>lastSeen</i>)</td>
+          <td>Online-Status im Spiel</td>
+          <td>Art. 6 (1) b DSGVO</td>
+        </tr>
+        <tr>
+          <td>Kauf-/Bestelldaten (Artikel, Betrag, Zeitpunkt, PayPal-Order-ID)</td>
+          <td>Abwicklung von Käufen, Nachweis</td>
+          <td>Art. 6 (1) b &amp; c DSGVO (rechtl. Pflicht)</td>
+        </tr>
+      </table>
+      <p class="muted">
+        Das Spiel setzt <b>keine Tracking-Cookies und keine Werbung</b> ein. Für
+        den Betrieb wird lediglich ein technisch notwendiger Login-Token im
+        <i>localStorage</i> deines Browsers gespeichert.
+      </p>
+
+      <h2>3. Zahlungsabwicklung (PayPal)</h2>
+      <p>
+        Käufe im Item-Shop werden über
+        <b>PayPal (Europe) S.à r.l. et Cie, S.C.A.</b> abgewickelt. Dabei werden
+        die für die Zahlung nötigen Daten direkt an PayPal übermittelt; es gelten
+        deren Datenschutzbestimmungen. Wir erhalten von PayPal eine
+        Bestell-/Transaktions-ID und den Zahlungsstatus, nicht jedoch deine
+        Zahlungsmittel-Daten.
+        <span class="ph">[Bei App-Store-Vertrieb: statt PayPal Apple In-App-Käufe — Abschnitt anpassen.]</span>
+      </p>
+
+      <h2>4. Hosting &amp; Speicherung</h2>
+      <p>
+        Die Anwendung wird betrieben bei
+        <span class="ph">[HOSTING-ANBIETER, Ort]</span>. Spielstände werden gespeichert
+        <span class="ph">[in einer JSON-Datei auf dem Server / bei Upstash Redis, Region …]</span>.
+        Mit den Auftragsverarbeitern bestehen Verträge zur Auftragsverarbeitung
+        (Art. 28 DSGVO).
+      </p>
+      <p>
+        Für den Versand von Bestätigungs- und Passwort-Reset-Mails wird ein
+        Transaktions-Mail-Dienstleister eingesetzt
+        (<span class="ph">[z. B. Resend / Postmark / … — tatsächlich genutzten Anbieter eintragen]</span>);
+        dabei werden E-Mail-Adresse und Nachrichteninhalt an diesen übermittelt.
+      </p>
+
+      <h2>5. Speicherdauer</h2>
+      <p>
+        Kontodaten werden gespeichert, bis du dein Konto löschst. Session-Tokens,
+        nicht abgeschlossene Bestellungen und verwaiste Anfragen werden
+        automatisch nach Ablauf entfernt. Kauf-/Rechnungsdaten können
+        gesetzlichen Aufbewahrungsfristen unterliegen
+        (<span class="ph">[z. B. 10 Jahre nach § 147 AO / § 257 HGB]</span>).
+      </p>
+
+      <h2>6. Deine Rechte</h2>
+      <p>
+        Du hast das Recht auf Auskunft (Art. 15), Berichtigung (Art. 16),
+        Löschung (Art. 17), Einschränkung (Art. 18), Datenübertragbarkeit
+        (Art. 20) und Widerspruch (Art. 21) sowie ein Beschwerderecht bei einer
+        Aufsichtsbehörde.
+      </p>
+      <p>
+        <b>Direkt im Spiel:</b> Unter <i>Profil → „Meine Daten &amp; Konto"</i>
+        kannst du jederzeit deine Daten als Datei <b>exportieren</b> und dein
+        Konto <b>endgültig löschen</b>.
+      </p>
+
+      <h2>7. Minderjährige</h2>
+      <p>
+        Das Angebot richtet sich nicht an Kinder unter
+        <span class="ph">[Altersgrenze, z. B. 16]</span> Jahren.
+      </p>
+
+      <footer>
+        VOXEMPIRE · Stand: <span class="ph">[DATUM]</span>
+      </footer>
+    </div>
+  </body>
+</html>

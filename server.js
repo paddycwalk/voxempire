@@ -41,11 +41,24 @@ const MIME = {
 const routes = {
   "POST /api/register": {
     auth: false,
-    fn: (_, body) => game.register(body.name, body.pass),
+    fn: (_, body) => game.register(body.name, body.pass, body.email),
   },
   "POST /api/login": {
     auth: false,
     fn: (_, body) => game.login(body.name, body.pass),
+  },
+  // E-Mail-Bestätigung & Passwort-Reset (ohne Auth — Token stammt aus der Mail).
+  "POST /api/account/verify": {
+    auth: false,
+    fn: (_, b) => game.verifyEmail(b.token),
+  },
+  "POST /api/account/request-reset": {
+    auth: false,
+    fn: (_, b) => game.requestPasswordReset(b.email),
+  },
+  "POST /api/account/reset": {
+    auth: false,
+    fn: (_, b) => game.resetPassword(b.token, b.newPass),
   },
   "POST /api/logout": {
     auth: false,
@@ -156,8 +169,34 @@ const routes = {
   },
   "POST /api/profile/password": {
     auth: true,
-    fn: (u, b) => {
-      game.changePassword(u, b.oldPass, b.newPass);
+    fn: async (u, b) => {
+      await game.changePassword(u, b.oldPass, b.newPass);
+      return {};
+    },
+  },
+
+  // Native App (Capacitor): Geräte-Token für Push-Benachrichtigungen anmelden.
+  "POST /api/push/register": {
+    auth: true,
+    fn: (u, b) => game.registerPushToken(u, b.token, b.platform),
+  },
+
+  // Konto: E-Mail ändern / Bestätigung erneut senden (eingeloggt).
+  "POST /api/account/email": {
+    auth: true,
+    fn: (u, b) => game.changeEmail(u, b.email),
+  },
+  "POST /api/account/resend-verification": {
+    auth: true,
+    fn: (u) => game.resendVerification(u),
+  },
+
+  // Konto: Datenexport (DSGVO) und endgültige Löschung (DSGVO / Apple 5.1.1).
+  "GET  /api/account/export": { auth: true, fn: (u) => game.exportData(u) },
+  "POST /api/account/delete": {
+    auth: true,
+    fn: async (u, b) => {
+      await game.deleteAccount(u, b.pass);
       return {};
     },
   },
@@ -248,6 +287,31 @@ const routes = {
       return game.getChat(u);
     },
   },
+  // Moderation nutzergenerierter Inhalte (App-Store Guideline 1.2).
+  "POST /api/chat/report": {
+    auth: true,
+    fn: (u, b) => game.reportChat(u, b.id),
+  },
+  "POST /api/chat/block": {
+    auth: true,
+    fn: (u, b) => game.blockChatUser(u, b.name),
+  },
+  "POST /api/chat/unblock": {
+    auth: true,
+    fn: (u, b) => game.unblockChatUser(u, b.name),
+  },
+  "POST /api/chat/delete": {
+    auth: true,
+    fn: (u, b) => game.adminDeleteChat(u, b.id),
+  },
+  "POST /api/chat/ban": {
+    auth: true,
+    fn: (u, b) => game.adminBanUser(u, b.name),
+  },
+  "POST /api/chat/unban": {
+    auth: true,
+    fn: (u, b) => game.adminUnbanUser(u, b.name),
+  },
 
   "GET  /api/friends": { auth: true, fn: (u) => game.friendData(u) },
   "POST /api/friends/request": {
@@ -291,9 +355,50 @@ function findRoute(method, pathname) {
   return null;
 }
 
+// ---------------- Rate-Limiting (Brute-Force-/Spam-Schutz) ----------------
+// Einfache Fenster-Zählung je IP + Aktion. Ohne persistente Platte, nur im
+// Speicher — reicht als Bremse gegen Passwort-Raten und Massen-Registrierung.
+const rlBuckets = new Map(); // key -> { count, resetAt }
+function rateLimited(key, max, windowMs, now = Date.now()) {
+  let b = rlBuckets.get(key);
+  if (!b || b.resetAt <= now) {
+    b = { count: 0, resetAt: now + windowMs };
+    rlBuckets.set(key, b);
+  }
+  b.count += 1;
+  return b.count > max;
+}
+// Client-IP ermitteln (hinter Reverse-Proxy/CDN steht sie in X-Forwarded-For).
+function clientIp(req) {
+  const xff = req.headers["x-forwarded-for"];
+  if (xff) return String(xff).split(",")[0].trim();
+  return req.socket?.remoteAddress || "unknown";
+}
+// Abgelaufene Rate-Limit-Einträge periodisch entsorgen (sonst wächst die Map).
+function pruneRateLimits(now = Date.now()) {
+  for (const [k, b] of rlBuckets) if (b.resetAt <= now) rlBuckets.delete(k);
+}
+// Login/Registrierung drosseln: das Passwort-Hashing ist bewusst teuer, deshalb
+// vor jeder weiteren Arbeit begrenzen. Liefert true, wenn das Limit erreicht ist.
+function authRouteLimited(req, pathname) {
+  const ip = clientIp(req);
+  if (pathname === "/api/register")
+    return rateLimited(`reg:${ip}`, 5, 3_600_000); // 5 neue Konten pro Stunde/IP
+  if (pathname === "/api/login")
+    return rateLimited(`log:${ip}`, 15, 60_000); // 15 Login-Versuche pro Minute/IP
+  if (pathname === "/api/account/request-reset")
+    return rateLimited(`rst:${ip}`, 5, 3_600_000); // 5 Reset-Anfragen pro Stunde/IP
+  return false;
+}
+
 async function handleApi(req, res, url) {
   const route = findRoute(req.method, url.pathname);
   if (!route) return sendJson(res, 404, { error: "Unbekannte API-Route." });
+
+  if (authRouteLimited(req, url.pathname))
+    return sendJson(res, 429, {
+      error: "Zu viele Versuche. Bitte einen Moment warten.",
+    });
 
   let body = {};
   if (req.method === "POST") {
@@ -393,6 +498,18 @@ setInterval(() => {
 setInterval(() => {
   save().catch((e) => console.error("Speichern fehlgeschlagen:", e));
 }, SAVE_INTERVAL_MS);
+
+// Aufräumen: abgelaufene Sessions/Bestellungen/Anfragen und Rate-Limit-Reste.
+// Alle 5 Minuten — hält die (komplett serialisierte) DB und den Speicher schlank.
+const SWEEP_INTERVAL_MS = 5 * 60_000;
+setInterval(() => {
+  try {
+    game.sweep();
+    pruneRateLimits();
+  } catch (e) {
+    console.error("Sweep-Fehler:", e);
+  }
+}, SWEEP_INTERVAL_MS);
 
 async function shutdown() {
   console.log("\nSpeichere Spielstand …");

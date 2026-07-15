@@ -495,9 +495,9 @@ function renderVillageSelect() {
             vv.active ? " active" : ""
           }" role="option" data-id="${vv.id}" title="${
             vv.main ? "Hauptdorf" : ""
-          }">${vv.main ? "👑" : "🏰"} ${esc(
-            vv.name
-          )} <small>(${vv.x}|${vv.y})</small></button>`
+          }">${vv.main ? "👑" : "🏰"} ${esc(vv.name)} <small>(${vv.x}|${
+            vv.y
+          })</small></button>`
       )
       .join("");
     menu.querySelectorAll(".vs-item").forEach((el) => {

@@ -820,3 +820,28 @@ export const SHOP_ITEMS = {
     type: "finish",
   },
 };
+
+// ---------- Chat-Moderation ----------
+// Für App-Store-Konformität (Guideline 1.2, nutzergenerierte Inhalte): Wortfilter,
+// Melden, Blockieren. Diese Liste ist bewusst klein gehalten — bei Bedarf erweitern.
+// Der Filter maskiert Treffer (auch als Wortbestandteil), Groß/Klein egal.
+export const BADWORDS = [
+  "arschloch",
+  "hurensohn",
+  "wichser",
+  "fotze",
+  "schlampe",
+  "nutte",
+  "fuck",
+  "shit",
+  "bitch",
+  "asshole",
+  "nigger",
+  "nigga",
+  "fag",
+  "faggot",
+  "retard",
+];
+// So viele unabhängige Meldungen blenden eine Nachricht automatisch aus (Sicherheitsnetz,
+// damit anstößige Inhalte auch ohne manuelles Eingreifen binnen Minuten verschwinden).
+export const CHAT_REPORT_HIDE_THRESHOLD = 3;

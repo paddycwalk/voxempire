@@ -430,7 +430,8 @@ function renderWorldMap(
       const nameSize = 11.5,
         ownSize = 9.5;
       const plateW =
-        Math.max(villName.length * nameSize, ownerMark.length * ownSize) * 0.62 +
+        Math.max(villName.length * nameSize, ownerMark.length * ownSize) *
+          0.62 +
         14;
       const plateX = (cx - plateW / 2).toFixed(1);
       const label = `
@@ -448,7 +449,11 @@ function renderWorldMap(
   // Rohstoffvorkommen (klickbare Sammelplätze) über dem Terrain, unter den Bewegungen
   const NODE_COL = { holz: "#4d7a2e", stein: "#7d848f", eisen: "#c9962f" };
   // Hellere Schriftfarben für die Plaketten-Beschriftung (gut lesbar auf Dunkel).
-  const NODE_LABEL_COL = { holz: "#9ecb63", stein: "#c7cfda", eisen: "#e8c161" };
+  const NODE_LABEL_COL = {
+    holz: "#9ecb63",
+    stein: "#c7cfda",
+    eisen: "#e8c161",
+  };
   const NODE_LABEL = { holz: "Wald", stein: "Steinbruch", eisen: "Eisenader" };
   let nodesLayer = "";
   for (const n of nodes || []) {
