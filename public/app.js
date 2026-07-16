@@ -25,8 +25,6 @@ function persistSettings() {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
-console.log("test");
-
 let token = localStorage.getItem("vox_token") || null;
 let meta = null; // Gebäude-/Einheiten-Stammdaten vom Server
 let state = null; // letzter /api/state-Stand
@@ -92,9 +90,9 @@ const esc = (s) =>
   String(s).replace(
     /[&<>"']/g,
     (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[
         c
-      ],
+      ])
   );
 
 const RES_NAMES = { holz: "Holz", stein: "Stein", eisen: "Eisen" };
@@ -116,7 +114,7 @@ function costHtml(cost, res) {
       ([r, n]) =>
         `<span class="${res && res[r] < n ? "no" : ""}" title="${
           RES_NAMES[r]
-        }">${icons[r]} ${fmtNum(n)}</span>`,
+        }">${icons[r]} ${fmtNum(n)}</span>`
     )
     .join(" ");
 }
@@ -183,8 +181,8 @@ function notify({
       NOTIFY_ICONS[type] || NOTIFY_ICONS.info
     }</span></div>
     <div class="n-text"><b>${esc(title)}</b>${
-      body ? `<span>${body}</span>` : ""
-    }</div>
+    body ? `<span>${body}</span>` : ""
+  }</div>
     <button class="n-close" title="Schließen">✕</button>
     <i class="n-progress" style="animation-duration:${ttl}ms"></i>`;
   if (celebrate ?? NOTIFY_CELEBRATE.has(type)) spawnConfetti(el);
@@ -226,7 +224,7 @@ function detectCompletions(prev, next) {
 
   // Fertige Bauaufträge
   const nq = new Set(
-    next.village.queue.map((q) => key(q.b, q.toLevel, q.done)),
+    next.village.queue.map((q) => key(q.b, q.toLevel, q.done))
   );
   for (const q of prev.village.queue) {
     if (q.done <= now && !nq.has(key(q.b, q.toLevel, q.done))) {
@@ -243,7 +241,7 @@ function detectCompletions(prev, next) {
 
   // Fertige Ausbildung
   const ntq = new Set(
-    next.village.trainQueue.map((q) => key(q.unit, q.count, q.done)),
+    next.village.trainQueue.map((q) => key(q.unit, q.count, q.done))
   );
   for (const q of prev.village.trainQueue) {
     if (q.done <= now && !ntq.has(key(q.unit, q.count, q.done))) {
@@ -260,7 +258,7 @@ function detectCompletions(prev, next) {
 
   // Zurückgekehrte Truppen (Angriffs-Einschlag selbst meldet der neue Bericht)
   const nret = new Set(
-    next.movements.outgoing.filter((m) => m.type === "return").map((m) => m.at),
+    next.movements.outgoing.filter((m) => m.type === "return").map((m) => m.at)
   );
   for (const m of prev.movements.outgoing) {
     if (m.type === "return" && m.at <= now && !nret.has(m.at)) {
@@ -280,7 +278,7 @@ function detectCompletions(prev, next) {
   const ngret = new Set(
     next.movements.outgoing
       .filter((m) => m.type === "gatherReturn")
-      .map((m) => m.at),
+      .map((m) => m.at)
   );
   for (const m of prev.movements.outgoing) {
     if (m.type === "gatherReturn" && m.at <= now && !ngret.has(m.at)) {
@@ -345,7 +343,7 @@ function detectCompletions(prev, next) {
 
   // Neue eingehende Angriffe
   const pinc = new Set(
-    prev.movements.incoming.map((m) => key(m.at, m.fromOwner)),
+    prev.movements.incoming.map((m) => key(m.at, m.fromOwner))
   );
   for (const m of next.movements.incoming) {
     if (!pinc.has(key(m.at, m.fromOwner))) {
@@ -391,39 +389,17 @@ function showAuth() {
 async function doAuth(register) {
   const name = $("#authName").value.trim();
   const pass = $("#authPass").value;
-  const email = $("#authEmail") ? $("#authEmail").value.trim() : "";
   $("#authError").textContent = "";
   try {
-    const body = register ? { name, pass, email } : { name, pass };
-    const r = await api(register ? "/api/register" : "/api/login", body);
+    const r = await api(register ? "/api/register" : "/api/login", {
+      name,
+      pass,
+    });
     token = r.token;
     localStorage.setItem("vox_token", token);
-    // Im Testmodus (kein Mail-Anbieter) liefert die Registrierung den
-    // Bestätigungslink direkt zurück, damit man ihn ohne echte Mail öffnen kann.
-    if (register && r.verify && r.verify.testMode && r.verify.url) {
-      console.log("[VOXEMPIRE] Bestätigungslink (Testmodus):", r.verify.url);
-      toast("Testmodus: Bestätigungslink in der Konsole.");
-    }
     await enterGame();
   } catch (e) {
     $("#authError").textContent = e.message;
-  }
-}
-
-// „Passwort vergessen?" — E-Mail abfragen, Reset-Link anfordern.
-async function forgotPassword() {
-  const email = prompt("E-Mail-Adresse deines Kontos:");
-  if (!email) return;
-  try {
-    const r = await api("/api/account/request-reset", { email: email.trim() });
-    if (r.testMode && r.url) {
-      console.log("[VOXEMPIRE] Reset-Link (Testmodus):", r.url);
-      toast("Testmodus: Reset-Link in der Konsole.");
-    } else {
-      toast("Falls die E-Mail registriert ist, wurde ein Reset-Link gesendet.");
-    }
-  } catch (e) {
-    toast(e.message, true);
   }
 }
 
@@ -436,9 +412,6 @@ async function enterGame() {
   if (!mapCenter) mapCenter = { x: state.village.x, y: state.village.y };
   switchTab("dorf");
   startPolling();
-  // In der nativen App (Capacitor) für Push-Benachrichtigungen registrieren.
-  // Im Browser ein No-Op (initPush prüft window.Capacitor).
-  if (window.initPush) window.initPush(api);
 }
 
 function startPolling() {
@@ -502,8 +475,12 @@ function renderVillageSelect() {
   }
 
   const active = villages.find((vv) => vv.active) || villages[0];
-  btn.innerHTML = `🏰 ${esc(active.name)} <span class="vs-caret">▾</span>`;
-  btn.title = `${active.name} (${active.x}|${active.y}) – Dorf wechseln`;
+  btn.innerHTML = `${active.main ? "👑" : "🏰"} ${esc(
+    active.name
+  )} <span class="vs-caret">▾</span>`;
+  btn.title = `${active.name} (${active.x}|${active.y})${
+    active.main ? " – Hauptdorf" : ""
+  } – Dorf wechseln`;
 
   // Menüinhalt nur neu aufbauen, wenn sich die Dörferliste geändert hat.
   const sig = villages
@@ -516,9 +493,11 @@ function renderVillageSelect() {
         (vv) =>
           `<button type="button" class="vs-item${
             vv.active ? " active" : ""
-          }" role="option" data-id="${vv.id}">🏰 ${esc(vv.name)}${
-            vv.main ? ' <span class="vs-main" title="Hauptdorf">👑</span>' : ""
-          } <small>(${vv.x}|${vv.y})</small></button>`,
+          }" role="option" data-id="${vv.id}" title="${
+            vv.main ? "Hauptdorf" : ""
+          }">${vv.main ? "👑" : "🏰"} ${esc(vv.name)} <small>(${vv.x}|${
+            vv.y
+          })</small></button>`
       )
       .join("");
     menu.querySelectorAll(".vs-item").forEach((el) => {
@@ -586,7 +565,7 @@ function renderHeader() {
     const lost = v.residents.lost || 0;
     resEl.title = lost
       ? `${lost} Bewohner gefallen – wachsen im Rathaus nach (1 je ${fmtDur(
-          v.residents.regenMs,
+          v.residents.regenMs
         )})`
       : "Freie / verfügbare Bewohner";
     resEl.classList.toggle("res-wounded", lost > 0);
@@ -645,7 +624,7 @@ function renderHeader() {
     prot.classList.remove("hidden");
     prot.innerHTML = `🛡️ Anfängerschutz aktiv — du kannst nicht angegriffen werden. Endet in ${countdown(
       v.protectedUntil,
-      { tag: "b" },
+      { tag: "b" }
     )} (oder mit deinem ersten Angriff).`;
   } else prot.classList.add("hidden");
 
@@ -656,34 +635,10 @@ function renderHeader() {
     inc.innerHTML = `⚠️ ${
       state.movements.incoming.length
     } Angriff(e) im Anmarsch! Nächster von ${esc(
-      next.fromOwner,
+      next.fromOwner
     )} in ${countdown(next.at, { tag: "b" })}`;
   } else inc.classList.add("hidden");
-
-  // Hinweis, solange die hinterlegte E-Mail noch nicht bestätigt ist.
-  const mail = $("#emailBanner");
-  if (mail) {
-    if (state.user && state.user.email && state.user.emailVerified === false) {
-      mail.classList.remove("hidden");
-      mail.innerHTML = `✉️ Bitte bestätige deine E-Mail-Adresse (${esc(
-        state.user.email,
-      )}). <button class="link-btn" onclick="resendVerification()">Bestätigung erneut senden</button>`;
-    } else mail.classList.add("hidden");
-  }
 }
-
-window.resendVerification = async () => {
-  try {
-    const r = await api("/api/account/resend-verification", {});
-    if (r.alreadyVerified) toast("Deine E-Mail ist bereits bestätigt.");
-    else if (r.testMode && r.url) {
-      console.log("[VOXEMPIRE] Bestätigungslink (Testmodus):", r.url);
-      toast("Testmodus: Bestätigungslink in der Konsole.");
-    } else toast("Bestätigungs-E-Mail wurde erneut gesendet.");
-  } catch (e) {
-    toast(e.message, true);
-  }
-};
 
 // ---------------- Tabs ----------------
 
@@ -885,7 +840,7 @@ function buildingGridHtml() {
       let badge;
       if (b.locked) {
         badge = `<span class="bld-lock">🔒 ${esc(
-          b.reqText || "gesperrt",
+          b.reqText || "gesperrt"
         )}</span>`;
       } else if (b.level > 0) {
         badge = `<span class="bld-lvl">Stufe ${b.level}</span>`;
@@ -894,7 +849,7 @@ function buildingGridHtml() {
       }
       return `
       <button type="button" class="bld-card${sel}${locked}" onclick="selectBuilding('${key}')" title="${esc(
-        def.name,
+        def.name
       )}">
         <span class="bld-ic">${BUILDING_ICONS[key] || "🏛️"}</span>
         <span class="bld-name">${esc(def.name)}</span>
@@ -921,7 +876,7 @@ function buildingPanelHtml() {
   const afford =
     !maxed && Object.entries(b.nextCost).every(([r, n]) => liveRes(r) >= n);
   const live = Object.fromEntries(
-    ["holz", "stein", "eisen"].map((r) => [r, liveRes(r)]),
+    ["holz", "stein", "eisen"].map((r) => [r, liveRes(r)])
   );
 
   let action;
@@ -934,7 +889,7 @@ function buildingPanelHtml() {
       <div class="bp-locked">
         <div class="bp-locked-head">🔒 Noch nicht verfügbar</div>
         <p class="muted">Benötigt <b class="gold">${esc(
-          b.reqText || "höheres Rathaus",
+          b.reqText || "höheres Rathaus"
         )}</b>, um dieses Gebäude zu bauen.</p>
       </div>`;
   } else if (maxed) {
@@ -950,8 +905,8 @@ function buildingPanelHtml() {
         }</span><span class="duration">⏱ ${fmtDur(b.nextTime)}</span></div>
         <div class="cost big">${costHtml(b.nextCost, live)}</div>
         <button class="btn ${afford ? "primary" : ""} bp-build" ${
-          afford ? "" : "disabled"
-        } onclick="actionBuild('${key}')">
+      afford ? "" : "disabled"
+    } onclick="actionBuild('${key}')">
           ${
             afford
               ? `🔨 Ausbauen · ⏱ ${fmtDur(b.nextTime)}`
@@ -981,7 +936,7 @@ function buildingPanelHtml() {
     const nextVal =
       b.effectNext && !maxed
         ? ` <span class="bp-effect-arrow">→</span> <b class="gold">${esc(
-            b.effectNext,
+            b.effectNext
           )}</b>`
         : "";
     effect = `
@@ -997,8 +952,8 @@ function buildingPanelHtml() {
       <div>
         <b>${esc(def.name)}</b>
         <div class="bp-level">Stufe ${b.level}${
-          b.level ? "" : " · noch nicht gebaut"
-        }</div>
+    b.level ? "" : " · noch nicht gebaut"
+  }</div>
       </div>
     </div>
     <p class="bp-desc">${def.desc}</p>
@@ -1012,14 +967,14 @@ renderers.dorf = () => {
   $("#tab-dorf").innerHTML = `
     <div class="village-head">
       <h2>${esc(v.name)} <small class="muted">(${v.x}|${v.y}) · ${fmtNum(
-        v.points,
-      )} Punkte</small></h2>
+    v.points
+  )} Punkte</small></h2>
     </div>
     <div class="village-layout">
       <div class="village-scene-wrap">${renderVillageScene(
         state,
         meta,
-        selectedBuilding,
+        selectedBuilding
       )}</div>
       <aside class="village-side">
         <div class="card building-panel" id="buildingPanel">${buildingPanelHtml()}</div>
@@ -1050,7 +1005,7 @@ function garrisonHtml() {
   const total = Object.values(v.units).reduce((s, u) => s + (u.count || 0), 0);
   return `<div class="garrison-grid">${rows}</div>
     <div class="garrison-total">Gesamt: <b>${fmtNum(
-      total,
+      total
     )}</b> Einheiten · Versorgung ${fmtNum(v.pop)}/${fmtNum(v.popCap)}</div>`;
 }
 
@@ -1074,7 +1029,7 @@ function movementsHtml() {
       at: m.at,
       art: '<span class="red">⚠️ Angriff</span>',
       count: `von ${esc(m.fromOwner)}<br><small class="muted">${esc(
-        m.fromVillage,
+        m.fromVillage
       )} (${m.x}|${m.y})</small>`,
       support: "",
       action: "",
@@ -1101,7 +1056,7 @@ function movementsHtml() {
           at: homeAt,
           art: "👷 Sammeln",
           count: `${m.workers}× Bewohner<br><small class="muted">→ ${esc(
-            m.target,
+            m.target
           )} (${m.x}|${m.y})</small>`,
           support,
           action: recall,
@@ -1113,7 +1068,7 @@ function movementsHtml() {
           count: `Bewohner${
             m.yield
               ? `<br><small class="muted">+${fmtNum(
-                  m.yield,
+                  m.yield
                 )} ${resName}</small>`
               : ""
           }`,
@@ -1149,8 +1104,8 @@ function movementsHtml() {
       m.type === "explore"
         ? `(${m.x}|${m.y})`
         : m.type === "return"
-          ? `von ${esc(m.target)}`
-          : `→ ${esc(m.target)} (${m.x}|${m.y})`;
+        ? `von ${esc(m.target)}`
+        : `→ ${esc(m.target)} (${m.x}|${m.y})`;
     const loot = m.loot
       ? `<br><small class="muted">Beute: ${costHtml(m.loot)}</small>`
       : "";
@@ -1174,7 +1129,7 @@ function movementsHtml() {
     at: null,
     art: "🤝 Verstärkt",
     count: `${esc(s.target)} (${s.x}|${s.y})<br><small class="muted">${esc(
-      s.owner,
+      s.owner
     )} · ${unitList(s.units)}</small>`,
     support: "",
     action: `<button class="btn small" onclick="recallReinforce('${s.targetId}','${s.fromId}')" title="Zurückbeordern">↩️</button>`,
@@ -1185,7 +1140,7 @@ function movementsHtml() {
     at: null,
     art: "🛡️ Verstärkung",
     count: `von ${esc(r.owner)}<br><small class="muted">${esc(
-      r.fromVillage,
+      r.fromVillage
     )} · ${unitList(r.units)}</small>`,
     support: "",
     action: "",
@@ -1202,7 +1157,7 @@ function movementsHtml() {
           <td class="move-support">${i.support}</td>
           <td class="move-time">${i.at ? countdown(i.at) : ""}</td>
           <td class="move-action">${i.action}</td>
-        </tr>`,
+        </tr>`
       )
       .join("");
   const section = (title, items, sort = true) =>
@@ -1235,7 +1190,7 @@ function queueHtml() {
               meta.BUILDINGS[q.b].name
             } → Stufe ${q.toLevel} <small class="muted">/ max ${
               meta.BUILDINGS[q.b].max
-            }</small></span>${countdown(q.done)}</div>`,
+            }</small></span>${countdown(q.done)}</div>`
         )
         .join("")
     : '<p class="muted">Keine laufenden Bauaufträge.</p>';
@@ -1293,7 +1248,7 @@ window.actionDemolish = async (key) => {
     !confirm(
       `${meta.BUILDINGS[key].name} von Stufe ${b.level} auf ${
         b.level - 1
-      } abreißen? Du bekommst die Hälfte der ausgegebenen Rohstoffe zurück.`,
+      } abreißen? Du bekommst die Hälfte der ausgegebenen Rohstoffe zurück.`
     )
   )
     return;
@@ -1355,7 +1310,7 @@ function unitPresetBtns(inputId, max) {
   const nums = UNIT_PRESETS.filter((n) => n < max)
     .map(
       (n) =>
-        `<button type="button" class="btn small" onclick="setUnitCount('${inputId}',${n},${max})">${n}</button>`,
+        `<button type="button" class="btn small" onclick="setUnitCount('${inputId}',${n},${max})">${n}</button>`
     )
     .join("");
   return `<span class="pick-presets">${nums}<button type="button" class="btn small" onclick="setUnitCount('${inputId}',${max},${max})">Max</button></span>`;
@@ -1390,8 +1345,8 @@ function unitPickerCard(key, def, max, inputId, oninput = "", stat = "def") {
         <small class="pick-avail">verfügbar: <b>${fmtNum(max)}</b></small>
       </span>
       <input class="pick-input" type="number" min="0" max="${max}" value="0" id="${inputId}" ${
-        max ? "" : "disabled"
-      }${oninput ? ` oninput="${oninput}"` : ""}>
+    max ? "" : "disabled"
+  }${oninput ? ` oninput="${oninput}"` : ""}>
       ${unitPresetBtns(inputId, max)}
     </label>`;
 }
@@ -1405,8 +1360,8 @@ function trainSummaryHtml(key, val) {
   if (!Number.isFinite(n) || n < 1) {
     return `<span class="cost">${costHtml(def.cost, state.village.res)}</span>
       <br><small class="muted">⏱ ${fmtDur(u.time)}/Einheit · Versorgung ${
-        def.up
-      }</small>`;
+      def.up
+    }</small>`;
   }
   const clamped = Math.min(500, n);
   const cost = {};
@@ -1416,11 +1371,11 @@ function trainSummaryHtml(key, val) {
   const supplyClass = supply > free ? "no" : "";
   return `<span class="cost">${costHtml(cost, state.village.res)}</span>
     <br><small class="muted">⏱ ${fmtDur(
-      u.time * clamped,
+      u.time * clamped
     )} · <span class="${supplyClass}">Versorgung ${supply}</span> (frei ${Math.max(
-      0,
-      free,
-    )})</small>`;
+    0,
+    free
+  )})</small>`;
 }
 
 renderers.militaer = () => {
@@ -1440,10 +1395,10 @@ renderers.militaer = () => {
         } · Tempo ${def.speed} · trägt ${def.carry}</small></td>
         <td class="num" data-label="Im Dorf">${fmtNum(u.count)}</td>
         <td data-label="Kosten"><span class="cost">${costHtml(
-          def.cost,
+          def.cost
         )}</span><br><small class="muted">Versorgung ${def.up}</small></td>
         <td data-label="Ausbilden"><div class="unit-lockmsg">🔒 ${esc(
-          u.reqText || "gesperrt",
+          u.reqText || "gesperrt"
         )}</div></td>
       </tr>`;
       }
@@ -1451,7 +1406,7 @@ renderers.militaer = () => {
       const presetBtns =
         TRAIN_PRESETS.map(
           (n) =>
-            `<button type="button" class="btn small" onclick="pickTrainCount('${key}', ${n})">${n}</button>`,
+            `<button type="button" class="btn small" onclick="pickTrainCount('${key}', ${n})">${n}</button>`
         ).join("") +
         `<button type="button" class="btn small" onclick="pickTrainMax('${key}')">Max</button>`;
       return `
@@ -1460,13 +1415,13 @@ renderers.militaer = () => {
           UNIT_ICONS[key] || ""
         }</span></td>
         <td><b>${def.name}</b><br><small class="muted">Off ${def.off} · Def ${
-          def.def
-        } · Tempo ${def.speed} · trägt ${def.carry}</small></td>
+        def.def
+      } · Tempo ${def.speed} · trägt ${def.carry}</small></td>
         <td class="num" data-label="Im Dorf">${fmtNum(u.count)}</td>
         <td data-label="Kosten"><div class="train-sum" id="train-sum-${key}">${trainSummaryHtml(
-          key,
-          cnt,
-        )}</div></td>
+        key,
+        cnt
+      )}</div></td>
         <td data-label="Ausbilden">
           <div class="train-presets">${presetBtns}</div>
           <div class="train-input">
@@ -1484,7 +1439,7 @@ renderers.militaer = () => {
           (q) =>
             `<div class="queue-item"><span>${q.count}× ${
               meta.UNITS[q.unit].name
-            }</span>${countdown(q.done)}</div>`,
+            }</span>${countdown(q.done)}</div>`
         )
         .join("")
     : '<p class="muted">Keine laufende Ausbildung.</p>';
@@ -1553,14 +1508,14 @@ renderers.karte = async () => {
     selectedTile,
     selectedNode,
     explored,
-    selectedExplore,
+    selectedExplore
   );
 
   const res = state.village.residents || { idle: 0, total: 0 };
   el.innerHTML = `
     <h2>Weltkarte <small class="muted">Zentrum (${mapCenter.x}|${
-      mapCenter.y
-    }) · 👷 ${res.idle}/${res.total} Bewohner frei</small></h2>
+    mapCenter.y
+  }) · 👷 ${res.idle}/${res.total} Bewohner frei</small></h2>
     <div class="map-controls">
       <button class="btn small" onclick="moveMap(-5,0)">←</button>
       <button class="btn small" onclick="moveMap(5,0)">→</button>
@@ -1598,13 +1553,13 @@ renderers.karte = async () => {
     "map",
     (dx, dy) => moveMap(dx, dy),
     58,
-    5 * 58,
+    5 * 58
   );
 
   // Aus der Rangliste angesprungenes Dorf jetzt automatisch auswählen.
   if (pendingMapSelect) {
     const target = (data.villages || []).find(
-      (v) => v.x === pendingMapSelect.x && v.y === pendingMapSelect.y,
+      (v) => v.x === pendingMapSelect.x && v.y === pendingMapSelect.y
     );
     pendingMapSelect = null;
     if (target) {
@@ -1762,8 +1717,8 @@ function renderVillageDetail() {
           state.village.units[k].count,
           `atk-${k}`,
           "updateTravelPreview()",
-          "off",
-        ),
+          "off"
+        )
       )
       .join("");
     const scoutMax = state.village.units.spaeher?.count || 0;
@@ -1791,7 +1746,7 @@ function renderVillageDetail() {
       <div class="unit-picker">${inputs}</div>
       <div class="attack-preview">
         <div><span class="muted">Entfernung</span><b>${dist.toFixed(
-          1,
+          1
         )} Felder</b></div>
         <div><span class="muted">Reisezeit</span><b id="travelPreview" class="gold">—</b></div>
         <div><span class="muted">Angriffskraft</span><b id="atkPowerPreview" class="red">0</b></div>
@@ -1813,7 +1768,7 @@ function renderVillageDetail() {
     const { progress, needed } = t.conquest;
     conquestBanner = `<div class="conquest-bar" title="Adelungs-Fortschritt">👑 Treue gebrochen: <b>${progress}/${needed}</b> — noch ${Math.max(
       0,
-      needed - progress,
+      needed - progress
     )} Paladin-Angriff(e) bis zur Eroberung.</div>`;
   }
 
@@ -1823,22 +1778,17 @@ function renderVillageDetail() {
     const rows = Object.entries(meta.UNITS)
       .filter(([, def]) => !def.scout)
       .map(([k, def]) =>
-        unitPickerCard(
-          k,
-          def,
-          state.village.units[k]?.count || 0,
-          `reinf-${k}`,
-        ),
+        unitPickerCard(k, def, state.village.units[k]?.count || 0, `reinf-${k}`)
       )
       .join("");
     reinforceForm = `
       <div class="reinforce-box">
         <h4>🤝 Verstärkung entsenden</h4>
         <p class="muted small">Schicke Truppen nach ${esc(
-          t.village,
+          t.village
         )} (${dist.toFixed(
-          1,
-        )} Felder). Sie verteidigen das Dorf mit und lassen sich jederzeit zurückbeordern. Späher können nicht verstärken.</p>
+      1
+    )} Felder). Sie verteidigen das Dorf mit und lassen sich jederzeit zurückbeordern. Späher können nicht verstärken.</p>
         <div class="unit-picker">${rows}</div>
         <button class="btn primary" onclick="actionReinforce()">🤝 Verstärkung schicken</button>
       </div>`;
@@ -1847,11 +1797,11 @@ function renderVillageDetail() {
   el.innerHTML = `
     <div class="card">
       <h3 style="margin-top:0">${esc(t.village)} <small class="muted">(${t.x}|${
-        t.y
-      })</small></h3>
+    t.y
+  })</small></h3>
       <p>Besitzer: <b class="gold">${esc(t.owner)}</b>${
-        t.alliance ? ` · Allianz: [${esc(t.alliance)}]` : ""
-      } · ${fmtNum(t.points)} Punkte</p>
+    t.alliance ? ` · Allianz: [${esc(t.alliance)}]` : ""
+  } · ${fmtNum(t.points)} Punkte</p>
       ${conquestBanner}
       ${attackForm}
       ${reinforceForm}
@@ -1917,7 +1867,7 @@ window.updateTravelPreview = () => {
   }
   const dist = Math.hypot(
     state.village.x - selectedTile.x,
-    state.village.y - selectedTile.y,
+    state.village.y - selectedTile.y
   );
   el.textContent = fmtDur((dist / (slowest * meta.SPEED)) * 3_600_000);
 };
@@ -2030,7 +1980,7 @@ window.cancelMove = async (id) => {
 window.recallGather = async (id) => {
   if (
     !confirm(
-      "Sammelmission abbrechen? Die Bewohner kehren ohne Rohstoffe zurück.",
+      "Sammelmission abbrechen? Die Bewohner kehren ohne Rohstoffe zurück."
     )
   )
     return;
@@ -2067,8 +2017,8 @@ function renderExploreDetail() {
       <div class="scout-row">
         <label>Späher (max. ${scoutMax})
           <input type="number" min="1" max="${scoutMax}" value="${
-            Math.min(scoutMax, 1) || 1
-          }" id="explore-count">
+    Math.min(scoutMax, 1) || 1
+  }" id="explore-count">
         </label>
         <button class="btn primary" ${
           scoutMax ? "" : "disabled"
@@ -2076,7 +2026,7 @@ function renderExploreDetail() {
       </div>
       <div class="attack-preview">
         <div><span class="muted">Entfernung</span><b>${dist.toFixed(
-          1,
+          1
         )} Felder</b></div>
       </div>
       ${
@@ -2130,8 +2080,8 @@ function renderNodeDetail() {
           def,
           state.village.units[k].count,
           `guard-${k}`,
-          "updateGatherPreview()",
-        ),
+          "updateGatherPreview()"
+        )
       )
       .join("") ||
     '<p class="muted small">Keine Truppen im Dorf, die du als Wache mitschicken könntest.</p>';
@@ -2139,17 +2089,17 @@ function renderNodeDetail() {
   el.innerHTML = `
     <div class="card">
       <h3 style="margin-top:0">${info.icon} ${
-        info.label
-      } <small class="muted">(${n.x}|${n.y})</small></h3>
+    info.label
+  } <small class="muted">(${n.x}|${n.y})</small></h3>
       <p>Ergiebigkeit: <b class="gold">${"★".repeat(n.richness)}${"☆".repeat(
-        3 - n.richness,
-      )}</b> · liefert <b>${info.res}</b></p>
+    3 - n.richness
+  )}</b> · liefert <b>${info.res}</b></p>
       <p class="muted small">Schicke freie Bewohner hierher. Sie reisen hin, sammeln und kehren mit Rohstoffen zurück.</p>
       <div class="gather-row">
         <label>Bewohner (frei: ${idle})
           <input type="number" min="1" max="${Math.max(1, idle)}" value="${
-            Math.min(idle, 5) || 1
-          }" id="gather-count" oninput="updateGatherPreview()">
+    Math.min(idle, 5) || 1
+  }" id="gather-count" oninput="updateGatherPreview()">
         </label>
         <button class="btn primary" ${
           idle ? "" : "disabled"
@@ -2162,7 +2112,7 @@ function renderNodeDetail() {
       </div>
       <div class="attack-preview">
         <div><span class="muted">Entfernung</span><b>${dist.toFixed(
-          1,
+          1
         )} Felder</b></div>
         <div><span class="muted">Dauer (hin+sammeln+zurück)</span><b id="gatherTime" class="gold">—</b></div>
         <div><span class="muted">Erwartete Beute</span><b id="gatherYield" class="green">0</b></div>
@@ -2189,12 +2139,12 @@ window.updateGatherPreview = () => {
   const n = Math.max(0, Number($("#gather-count")?.value || 0));
   const dist = Math.hypot(
     state.village.x - selectedNode.x,
-    state.village.y - selectedNode.y,
+    state.village.y - selectedNode.y
   );
   const travel = (dist / g.workerSpeedEff) * 3_600_000;
   const total = travel * 2 + g.workMs;
   const yieldAmt = Math.round(
-    n * (selectedNode.richness || 1) * g.yieldPerWorker,
+    n * (selectedNode.richness || 1) * g.yieldPerWorker
   );
   const tEl = $("#gatherTime");
   const yEl = $("#gatherYield");
@@ -2224,7 +2174,7 @@ window.updateGatherPreview = () => {
     const perRich = g.banditPerRich ?? 5;
     const bandit = Math.round(
       (base + perRich * (selectedNode.richness || 1)) *
-        Math.sqrt(Math.max(1, n)),
+        Math.sqrt(Math.max(1, n))
     );
     const repelled = guardDef >= bandit;
     const pct = n < 1 ? 0 : repelled ? 100 : Math.round((1 - ambush) * 100);
@@ -2238,16 +2188,16 @@ window.updateGatherPreview = () => {
       if (hintEl) {
         hintEl.textContent = repelled
           ? `🛡️ Deine Wachen (${fmtNum(
-              guardDef,
+              guardDef
             )}) wehren die Räuber (Stärke ~${fmtNum(
-              bandit,
+              bandit
             )}) ab — Bewohner sicher.`
           : `⚠️ Räuberstärke ~${fmtNum(
-              bandit,
+              bandit
             )} übersteigt deine Wachen (${fmtNum(
-              guardDef,
+              guardDef
             )}). Bei einem Überfall (${Math.round(
-              ambush * 100,
+              ambush * 100
             )} %) fallen Bewohner.`;
       }
     }
@@ -2324,8 +2274,8 @@ function renderMarket(offers) {
           return `
       <tr>
         <td>${esc(o.seller)}${
-          mine ? ' <span class="gold">(du)</span>' : ""
-        }${allyBadge}</td>
+            mine ? ' <span class="gold">(du)</span>' : ""
+          }${allyBadge}</td>
         <td>${costHtml({ [o.give.res]: o.give.amount })}</td>
         <td>${costHtml({ [o.want.res]: o.want.amount })}</td>
         <td>${
@@ -2371,7 +2321,7 @@ function renderMarket(offers) {
         ${
           canAlliance && state.user.allianceTag
             ? `<label>Sichtbar für <select id="offerScope"><option value="world">Alle Spieler</option><option value="alliance">Nur Allianz [${esc(
-                state.user.allianceTag,
+                state.user.allianceTag
               )}]</option></select></label>`
             : ""
         }
@@ -2420,7 +2370,7 @@ function transportCardHtml() {
           v.hasMarket === false ? " disabled" : ""
         }>${esc(v.name)} (${v.x}|${v.y})${
           v.hasMarket === false ? " — kein Marktplatz" : ""
-        }</option>`,
+        }</option>`
     )
     .join("");
   const canSend = state.village.buildings.markt.level >= tiers.transfer;
@@ -2494,7 +2444,7 @@ window.marketAction = async (what, id, scope) => {
       toast(
         `Getauscht: ${r.give.amount} ${RES_NAMES[r.give.res]} → ${
           r.want.amount
-        } ${RES_NAMES[r.want.res]}.`,
+        } ${RES_NAMES[r.want.res]}.`
       );
       offers = await api("/api/market");
     } else {
@@ -2503,8 +2453,8 @@ window.marketAction = async (what, id, scope) => {
         what !== "accept"
           ? "Angebot zurückgezogen."
           : scope === "alliance"
-            ? "Handel besiegelt — die Karre ist unterwegs."
-            : "Handel abgeschlossen!",
+          ? "Handel besiegelt — die Karre ist unterwegs."
+          : "Handel abgeschlossen!"
       );
     }
     await refreshState();
@@ -2543,11 +2493,11 @@ function renderOwnAlliance(a) {
       <td>${
         state.user.name === a.leader && m.name !== a.leader
           ? `<button class="btn small danger" onclick="allianceAction('kick','${esc(
-              m.name,
+              m.name
             )}')">Entfernen</button>`
           : ""
       }</td>
-    </tr>`,
+    </tr>`
     )
     .join("");
 
@@ -2567,7 +2517,7 @@ function renderOwnAlliance(a) {
           r.id
         }')">Ablehnen</button>
       </td>
-    </tr>`,
+    </tr>`
     )
     .join("");
   const requestsCard = reqs.length
@@ -2586,10 +2536,10 @@ function renderOwnAlliance(a) {
     ${requestsCard}
     <div class="card">
       <p class="muted">Anführer: <b class="gold">${esc(a.leader)}</b> · ${
-        a.members.length
-      }/${
-        a.maxMembers || 10
-      } Mitglieder · Allianzmitglieder können einander nicht angreifen.</p>
+    a.members.length
+  }/${
+    a.maxMembers || 10
+  } Mitglieder · Allianzmitglieder können einander nicht angreifen.</p>
       <table style="margin-top:10px">
         <thead><tr><th>Mitglied</th><th class="num">Punkte</th><th>Dorf</th><th></th></tr></thead>
         <tbody>${members}</tbody>
@@ -2611,10 +2561,10 @@ function renderAllianceLobby(list) {
         a.requested
           ? `<button class="btn small" onclick="allianceAction('cancel','${a.id}')">Anfrage zurückziehen</button>`
           : a.memberCount >= (a.maxMembers || 10)
-            ? '<span class="muted">Voll</span>'
-            : `<button class="btn small primary" onclick="allianceAction('join','${a.id}')">Beitreten</button>`
+          ? '<span class="muted">Voll</span>'
+          : `<button class="btn small primary" onclick="allianceAction('join','${a.id}')">Beitreten</button>`
       }</td>
-    </tr>`,
+    </tr>`
         )
         .join("")
     : '<tr><td colspan="4" class="muted">Noch keine Allianzen — gründe die erste!</td></tr>';
@@ -2690,13 +2640,11 @@ renderers.chat = async () => {
     el.innerHTML = `
       <h2>Welt-Chat</h2>
       <div class="card chat-card">
-        <div id="chatBlocked" class="chat-blocked hidden"></div>
         <div id="chatLog" class="chat-log"><p class="muted">Lade …</p></div>
         <div class="chat-input">
           <input id="chatText" maxlength="240" placeholder="Nachricht an alle Spieler …" autocomplete="off">
           <button id="chatSend" class="btn primary">Senden</button>
         </div>
-        <p class="muted chat-hint">Sei fair. Über 🚩 kannst du Nachrichten melden, über 🚫 Spieler blockieren. Wiederholt gemeldete Nachrichten werden automatisch ausgeblendet.</p>
       </div>`;
     $("#chatSend").addEventListener("click", sendChat);
     $("#chatText").addEventListener("keydown", (e) => {
@@ -2709,125 +2657,35 @@ renderers.chat = async () => {
   await pollChat();
 };
 
-let chatMeta = { isAdmin: false, blocked: [] };
-
-function renderChatLog(r) {
+function renderChatLog(messages) {
   const log = $("#chatLog");
   if (!log) return;
-  const messages = r.messages || [];
-  chatMeta = { isAdmin: !!r.isAdmin, blocked: r.blocked || [] };
-  renderBlockedBar();
   // Nur automatisch nach unten scrollen, wenn der Nutzer ohnehin unten steht.
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   log.innerHTML = messages.length
-    ? messages.map(chatMsgHtml).join("")
+    ? messages
+        .map((m) => {
+          const mine = m.from === state.user.name;
+          return `<div class="chat-msg${mine ? " mine" : ""}">
+            <span class="chat-meta"><b>${esc(m.from)}</b><time>${chatTime(
+            m.time
+          )}</time></span>
+            <span class="chat-text">${esc(m.text)}</span>
+          </div>`;
+        })
+        .join("")
     : '<p class="muted">Noch keine Nachrichten. Schreib die erste!</p>';
   if (atBottom) log.scrollTop = log.scrollHeight;
-}
-
-function chatMsgHtml(m) {
-  const mine = m.mine ?? m.from === state.user.name;
-  const name = esc(m.from);
-  // Aktionen für fremde Nachrichten: melden & Absender blockieren.
-  const actions = mine
-    ? ""
-    : `<span class="chat-actions">
-         <button title="Melden" onclick="chatReport('${m.id}')">🚩</button>
-         <button title="${name} blockieren" onclick="chatBlock('${name}')">🚫</button>
-         ${
-           chatMeta.isAdmin
-             ? `<button title="Löschen (Mod)" onclick="chatModDelete('${m.id}')">🗑️</button>
-                <button title="${name} sperren (Mod)" onclick="chatModBan('${name}')">⛔</button>`
-             : ""
-         }
-       </span>`;
-  const modInfo =
-    chatMeta.isAdmin && (m.hidden || m.reports)
-      ? `<span class="chat-modinfo">${m.hidden ? "versteckt" : ""}${
-          m.reports ? ` · ${m.reports} Meldung(en)` : ""
-        }</span>`
-      : "";
-  return `<div class="chat-msg${mine ? " mine" : ""}${m.hidden ? " hidden-msg" : ""}">
-    <span class="chat-meta"><b>${name}</b><time>${chatTime(m.time)}</time>${modInfo}</span>
-    <span class="chat-text">${esc(m.text)}</span>
-    ${actions}
-  </div>`;
-}
-
-function renderBlockedBar() {
-  const bar = $("#chatBlocked");
-  if (!bar) return;
-  if (!chatMeta.blocked.length) {
-    bar.classList.add("hidden");
-    bar.innerHTML = "";
-    return;
-  }
-  bar.classList.remove("hidden");
-  bar.innerHTML =
-    `<span class="muted">Blockiert:</span> ` +
-    chatMeta.blocked
-      .map(
-        (n) =>
-          `<button class="chip" title="Blockierung aufheben" onclick="chatUnblock('${esc(n)}')">${esc(n)} ✕</button>`,
-      )
-      .join(" ");
 }
 
 async function pollChat() {
   try {
     const r = await api("/api/chat");
-    renderChatLog(r);
+    renderChatLog(r.messages || []);
   } catch {
     /* offline? nächster Poll */
   }
 }
-
-window.chatReport = async (id) => {
-  try {
-    const r = await api("/api/chat/report", { id });
-    toast(
-      r.hidden ? "Gemeldet — Nachricht ausgeblendet." : "Nachricht gemeldet.",
-    );
-    await pollChat();
-  } catch (e) {
-    toast(e.message, true);
-  }
-};
-window.chatBlock = async (name) => {
-  try {
-    renderChatLog(await api("/api/chat/block", { name }));
-    toast(`${name} blockiert.`);
-  } catch (e) {
-    toast(e.message, true);
-  }
-};
-window.chatUnblock = async (name) => {
-  try {
-    renderChatLog(await api("/api/chat/unblock", { name }));
-    toast(`Blockierung von ${name} aufgehoben.`);
-  } catch (e) {
-    toast(e.message, true);
-  }
-};
-window.chatModDelete = async (id) => {
-  try {
-    await api("/api/chat/delete", { id });
-    toast("Nachricht entfernt.");
-    await pollChat();
-  } catch (e) {
-    toast(e.message, true);
-  }
-};
-window.chatModBan = async (name) => {
-  if (!confirm(`${name} wirklich sperren?`)) return;
-  try {
-    const r = await api("/api/chat/ban", { name });
-    toast(`${r.banned} gesperrt.`);
-    await pollChat();
-  } catch (e) {
-    toast(e.message, true);
-  }
-};
 
 async function sendChat() {
   const input = $("#chatText");
@@ -2837,7 +2695,7 @@ async function sendChat() {
   input.value = "";
   try {
     const r = await api("/api/chat", { text });
-    renderChatLog(r);
+    renderChatLog(r.messages || []);
     input.focus();
   } catch (e) {
     toast(e.message, true);
@@ -2914,7 +2772,7 @@ function renderFriendData(d) {
             r.id
           }')">Ablehnen</button>
         </td>
-      </tr>`,
+      </tr>`
       )
       .join("");
     inEl.innerHTML = `<h3 style="margin-top:0">Eingehende Anfragen <span class="muted">(${d.incoming.length})</span></h3>
@@ -2936,7 +2794,7 @@ function renderFriendData(d) {
         <td><button class="btn small" onclick="friendRespond('decline','${
           r.id
         }')">Zurückziehen</button></td>
-      </tr>`,
+      </tr>`
       )
       .join("");
     outEl.innerHTML = `<h3 style="margin-top:0">Gesendete Anfragen <span class="muted">(${d.outgoing.length})</span></h3>
@@ -2954,8 +2812,8 @@ function renderFriendData(d) {
           (f) => `
       <tr>
         <td>${f.online ? "🟢" : "⚫"} <b>${esc(f.name)}</b>${
-          f.alliance ? ` <span class="muted">[${esc(f.alliance)}]</span>` : ""
-        }</td>
+            f.alliance ? ` <span class="muted">[${esc(f.alliance)}]</span>` : ""
+          }</td>
         <td class="num">${fmtNum(f.points)}</td>
         <td>${
           f.x != null
@@ -2964,9 +2822,9 @@ function renderFriendData(d) {
         }</td>
         <td class="muted">${f.online ? "online" : esc(relTime(f.lastSeen))}</td>
         <td><button class="btn small danger" onclick="friendRemove('${esc(
-          f.name,
+          f.name
         )}')">Entfernen</button></td>
-      </tr>`,
+      </tr>`
         )
         .join("")
     : '<tr><td colspan="5" class="muted">Noch keine Freunde — schick jemandem eine Anfrage!</td></tr>';
@@ -3034,7 +2892,7 @@ function rewardHtml(reward) {
     .filter(([, n]) => n > 0)
     .map(
       ([r, n]) =>
-        `<span title="${RES_NAMES[r]}">${RES_ICONS[r]} ${fmtNum(n)}</span>`,
+        `<span title="${RES_NAMES[r]}">${RES_ICONS[r]} ${fmtNum(n)}</span>`
     )
     .join(" ");
 }
@@ -3075,12 +2933,12 @@ function renderQuestData(d) {
         <div class="quest-level-top"><b>Stufe ${
           d.level
         }</b><span class="muted">${fmtNum(d.into)} / ${fmtNum(
-          d.need,
-        )} XP</span></div>
+    d.need
+  )} XP</span></div>
         <div class="bar"><span style="width:${pct}%"></span></div>
         <div class="muted small">Abgeschlossen: ${d.claimed}/${
-          d.total
-        } Aufträge</div>
+    d.total
+  } Aufträge</div>
       </div>
     </div>`;
 
@@ -3092,7 +2950,7 @@ function renderQuestData(d) {
     return 1;
   };
   const quests = [...d.quests].sort(
-    (a, b) => rank(a) - rank(b) || a.reqLevel - b.reqLevel,
+    (a, b) => rank(a) - rank(b) || a.reqLevel - b.reqLevel
   );
 
   listEl.innerHTML = quests
@@ -3114,7 +2972,7 @@ function renderQuestData(d) {
         action = `<button class="btn small primary" onclick="claimQuest('${q.id}')">Belohnung abholen</button>`;
       } else {
         action = `<span class="quest-state muted">${fmtNum(
-          q.current,
+          q.current
         )} / ${fmtNum(q.target)}</span>`;
       }
       return `
@@ -3130,8 +2988,8 @@ function renderQuestData(d) {
         <div class="bar slim"><span style="width:${pc}%"></span></div>
         <div class="quest-foot">
           <span class="muted small">${fmtNum(q.current)} / ${fmtNum(
-            q.target,
-          )}</span>
+        q.target
+      )}</span>
           <span class="quest-reward">Belohnung: ${rewardHtml(q.reward)}</span>
         </div>
       </div>`;
@@ -3158,7 +3016,7 @@ window.claimQuest = async (id) => {
       });
     }
     toast(
-      `Auftrag abgeschlossen — +${d.xpGained} XP${parts ? ", " + parts : ""}.`,
+      `Auftrag abgeschlossen — +${d.xpGained} XP${parts ? ", " + parts : ""}.`
     );
   } catch (e) {
     toast(e.message, true);
@@ -3212,11 +3070,11 @@ renderers.berichte = async () => {
         const l = lost[k] || 0;
         const left = n - l;
         return `<tr><td>${meta.UNITS[k].name}</td><td class="num">${fmtNum(
-          n,
+          n
         )}</td><td class="num red">${
           l ? "−" + fmtNum(l) : "—"
         }</td><td class="num ${left ? "green" : "red"}">${fmtNum(
-          left,
+          left
         )}</td></tr>`;
       })
       .join("");
@@ -3227,7 +3085,7 @@ renderers.berichte = async () => {
     }</tbody>${
       totSent
         ? `<tfoot><tr><td>Summe</td><td class="num">${fmtNum(
-            totSent,
+            totSent
           )}</td><td class="num red">${
             totLost ? "−" + fmtNum(totLost) : "—"
           }</td><td class="num">${fmtNum(totSent - totLost)}</td></tr></tfoot>`
@@ -3265,7 +3123,7 @@ renderers.berichte = async () => {
                 ([k, n]) =>
                   `<tr><td>${
                     meta.UNITS[k]?.name || k
-                  }</td><td class="num">${fmtNum(n)}</td></tr>`,
+                  }</td><td class="num">${fmtNum(n)}</td></tr>`
               )
               .join("")
           : '<tr><td colspan="2" class="muted">keine Truppen im Dorf</td></tr>';
@@ -3275,30 +3133,30 @@ renderers.berichte = async () => {
                 r.intel.wall * 6
               } % Verteidigung) · Lager fasst ${fmtNum(r.intel.storage)}</p>`
             : `<p class="muted small">Keine Stadtmauer · Lager fasst ${fmtNum(
-                r.intel.storage,
+                r.intel.storage
               )}</p>`;
         body = `
           <div class="rloot"><b>💰 Rohstoffe im Dorf</b> ${resHtml}</div>
           <table><thead><tr><th>Einheit</th><th class="num">Anzahl</th></tr></thead><tbody>${troopRows}</tbody></table>
           ${wallNote}
           <p class="muted small">Verlorene Späher: ${fmtNum(
-            r.attacker.lost.spaeher || 0,
+            r.attacker.lost.spaeher || 0
           )} von ${fmtNum(r.attacker.sent.spaeher || 0)}</p>`;
       } else {
         body = `<p class="red">Deine Späher wurden abgefangen — keine Informationen. Verluste: ${fmtNum(
-          r.attacker.lost.spaeher || 0,
+          r.attacker.lost.spaeher || 0
         )} von ${fmtNum(r.attacker.sent.spaeher || 0)} Spähern.</p>`;
       }
     } else {
       // Ich bin der Ausgespähte
       body = r.success
         ? `<p class="red">${esc(r.attacker.name)} (${esc(
-            r.attacker.village,
+            r.attacker.village
           )}, ${r.attacker.x}|${
             r.attacker.y
           }) hat dein Dorf erfolgreich ausgespäht — er kennt jetzt deine Rohstoffe und Truppen!</p>`
         : `<p class="green">Du hast feindliche Späher von ${esc(
-            r.attacker.name,
+            r.attacker.name
           )} (${esc(r.attacker.village)}, ${r.attacker.x}|${
             r.attacker.y
           }) abgefangen. Keine Informationen preisgegeben.</p>`;
@@ -3308,7 +3166,7 @@ renderers.berichte = async () => {
         success ? "won" : "lost"
       }" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
         <div class="rhead"><b>🔍 ${esc(
-          r.title,
+          r.title
         )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">${body}</div>
       </div>`;
@@ -3326,7 +3184,7 @@ renderers.berichte = async () => {
     const partnerLine =
       partner.name != null
         ? `<p class="muted">${iAmSeller ? "Käufer" : "Verkäufer"}: ${esc(
-            partner.name,
+            partner.name
           )}${
             partner.village != null
               ? ` (${esc(partner.village)}, ${partner.x}|${partner.y})`
@@ -3335,22 +3193,22 @@ renderers.berichte = async () => {
         : "";
     const shortNote = shortfall
       ? `<p class="muted small red">⚠️ Nur ${fmtNum(
-          r.received.amount,
+          r.received.amount
         )} von ${fmtNum(
-          r.received.offered,
+          r.received.offered
         )} gutgeschrieben — dein Lager war voll.</p>`
       : "";
     const pendingNote =
       pending && r.arrival
         ? `<p class="muted small">🛒 Die Handelskarre ist unterwegs — Ankunft ${fmtTime(
-            r.arrival,
+            r.arrival
           )}.</p>`
         : "";
     const stockHtml = r.stock ? costHtml(r.stock) : "";
     return `
       <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
         <div class="rhead"><b>⚖️ ${esc(
-          r.title,
+          r.title
         )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">
           ${partnerLine}
@@ -3375,19 +3233,19 @@ renderers.berichte = async () => {
     const gotHtml = costHtml({ [r.res]: r.stored });
     const wasteNote = r.wasted
       ? `<p class="muted small red">⚠️ ${fmtNum(
-          r.wasted,
+          r.wasted
         )} ${resName} gingen verloren — dein Lager war voll.</p>`
       : "";
     const stockHtml = r.stock ? costHtml(r.stock) : "";
     return `
       <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
         <div class="rhead"><b>👷 ${esc(
-          r.title,
+          r.title
         )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">
           <p class="muted">${fmtNum(r.workers)}× Bewohner am Vorkommen (${
-            r.x
-          }|${r.y})</p>
+      r.x
+    }|${r.y})</p>
           <div class="rloot"><b>📥 Gesammelt</b> ${gotHtml}</div>
           ${wasteNote}
           ${
@@ -3412,16 +3270,16 @@ renderers.berichte = async () => {
     return `
       <div class="card report ${cls}" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
         <div class="rhead"><b>${esc(r.title)}</b><span class="rtime">${fmtTime(
-          r.time,
-        )}</span></div>
+      r.time
+    )}</span></div>
         <div class="rbody hidden">
           <p class="muted">Vorkommen (${r.x}|${r.y}) · Räuberstärke ${fmtNum(
-            r.banditPower,
-          )} vs. Wach-Verteidigung ${fmtNum(r.guardDef)}</p>
+      r.banditPower
+    )} vs. Wach-Verteidigung ${fmtNum(r.guardDef)}</p>
           ${
             r.residentsKilled
               ? `<p class="red">🪦 Gefallene Bewohner: <b>${fmtNum(
-                  r.residentsKilled,
+                  r.residentsKilled
                 )}</b> — sie wachsen im Rathaus nach.</p>`
               : '<p class="green">Alle Bewohner sind unversehrt.</p>'
           }
@@ -3435,8 +3293,8 @@ renderers.berichte = async () => {
     return `
       <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
         <div class="rhead"><b>${esc(r.title)}</b><span class="rtime">${fmtTime(
-          r.time,
-        )}</span></div>
+      r.time
+    )}</span></div>
         <div class="rbody hidden">
           ${r.x != null ? `<p class="muted">Ziel: (${r.x}|${r.y})</p>` : ""}
           <p><b>🤝 Truppen:</b> ${unitList(r.units)}</p>
@@ -3448,7 +3306,7 @@ renderers.berichte = async () => {
     return `
       <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
         <div class="rhead"><b>🤝 ${esc(
-          r.title,
+          r.title
         )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">
           <p class="muted">Du bist jetzt mit ${esc(r.partner)} befreundet.</p>
@@ -3460,28 +3318,28 @@ renderers.berichte = async () => {
   const genericReport = (r) => `
       <div class="card report won" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
         <div class="rhead"><b>${esc(
-          r.title || r.kind || "Bericht",
+          r.title || r.kind || "Bericht"
         )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">
           ${r.from ? `<p class="muted">Von: ${esc(r.from)}</p>` : ""}
           ${
             r.res
               ? `<div class="rloot"><b>📦 Rohstoffe</b> ${costHtml(
-                  r.res,
+                  r.res
                 )}</div>`
               : ""
           }
           ${
             r.returned
               ? `<div class="rloot"><b>↩️ Lager voll — zurückgeschickt</b> ${costHtml(
-                  r.returned,
+                  r.returned
                 )}</div>`
               : ""
           }
           ${
             r.stock
               ? `<div class="rloot"><b>📦 Lager jetzt</b> ${costHtml(
-                  r.stock,
+                  r.stock
                 )}</div>`
               : ""
           }
@@ -3503,7 +3361,7 @@ renderers.berichte = async () => {
       const capNote =
         r.capacity != null
           ? ` <span class="muted">(${fmtNum(lootTotal)} von ${fmtNum(
-              r.capacity,
+              r.capacity
             )} Tragekapazität)</span>`
           : "";
       lootBlock = `<div class="rloot"><b>💰 Beute</b> ${
@@ -3531,7 +3389,7 @@ renderers.berichte = async () => {
             r.conquest.needed
           } — noch ${Math.max(
             0,
-            r.conquest.needed - r.conquest.progress,
+            r.conquest.needed - r.conquest.progress
           )} Paladin-Angriff(e) bis zur Eroberung.</div>`;
     }
     return `
@@ -3539,28 +3397,28 @@ renderers.berichte = async () => {
         success ? "won" : "lost"
       }" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
         <div class="rhead"><b>${success ? "✅" : "❌"} ${esc(
-          r.title,
-        )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+      r.title
+    )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">
           <p class="muted">⚔️ ${esc(r.attacker.name)} (${esc(
-            r.attacker.village,
-          )}, ${r.attacker.x}|${r.attacker.y}) → 🛡️ ${esc(r.defender.name)} (${esc(
-            r.defender.village,
-          )}, ${r.defender.x}|${r.defender.y})<br>Ergebnis: ${outcome}${wallNote}</p>
+      r.attacker.village
+    )}, ${r.attacker.x}|${r.attacker.y}) → 🛡️ ${esc(r.defender.name)} (${esc(
+      r.defender.village
+    )}, ${r.defender.x}|${r.defender.y})<br>Ergebnis: ${outcome}${wallNote}</p>
           ${powerBar(r.attacker.power || 0, r.defender.power || 0)}
           ${lootBlock}
           ${conquestBlock}
           ${
             r.defender.residentsLost
               ? `<p class="red">🪦 Gefallene Bewohner beim Verteidiger: <b>${fmtNum(
-                  r.defender.residentsLost,
+                  r.defender.residentsLost
                 )}</b> — wachsen im Rathaus nach.</p>`
               : ""
           }
           ${
             r.defender.garrisonLost
               ? `<p class="muted small">Verlorene Verstärkung: ${Object.entries(
-                  r.defender.garrisonLost,
+                  r.defender.garrisonLost
                 )
                   .map(([k, n]) => `${fmtNum(n)}× ${meta.UNITS[k]?.name || k}`)
                   .join(", ")}</p>`
@@ -3570,12 +3428,12 @@ renderers.berichte = async () => {
             <div>${unitTable(
               "Angreifer",
               r.attacker.sent,
-              r.attacker.lost,
+              r.attacker.lost
             )}</div>
             <div>${unitTable(
               "Verteidiger",
               r.defender.had,
-              r.defender.lost,
+              r.defender.lost
             )}</div>
           </div>
         </div>
@@ -3590,27 +3448,27 @@ renderers.berichte = async () => {
         mine ? "won" : "lost"
       }" onclick="this.querySelector('.rbody').classList.toggle('hidden')">
         <div class="rhead"><b>${mine ? "👑" : "🏳️"} ${esc(
-          r.title,
-        )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
+      r.title
+    )}</b><span class="rtime">${fmtTime(r.time)}</span></div>
         <div class="rbody hidden">
           ${
             mine
               ? `<p class="green">Dein Paladin hat <b>${esc(
-                  r.village.name,
+                  r.village.name
                 )}</b> (${r.village.x}|${
                   r.village.y
                 }) erobert — es gehört jetzt zu deinem Reich!</p>
                  <p class="muted">Bisheriger Besitzer: ${esc(
-                   r.formerOwner,
+                   r.formerOwner
                  )}</p>`
               : `<p class="red">Du hast <b>${esc(r.village.name)}</b> (${
                   r.village.x
                 }|${r.village.y}) verloren.</p>
                  <p class="muted">Neuer Besitzer: ${esc(
-                   r.conqueror.name,
+                   r.conqueror.name
                  )} (${esc(r.conqueror.village)}, ${r.conqueror.x}|${
-                   r.conqueror.y
-                 })</p>`
+                  r.conqueror.y
+                })</p>`
           }
         </div>
       </div>`;
@@ -3659,7 +3517,7 @@ renderers.berichte = async () => {
       ? `<div class="rvfilter">${vChip(
           "all",
           "🌍 Alle Dörfer",
-          reports.length,
+          reports.length
         )}${villages
           .map((vv) => vChip(vv.id, `🏰 ${esc(vv.name)}`, villageCount(vv.id)))
           .join("")}</div>`
@@ -3697,20 +3555,20 @@ renderers.berichte = async () => {
     "Freundschaft",
   ];
   const presentKinds = KIND_ORDER.filter((k) => counts[k]).concat(
-    Object.keys(counts).filter((k) => !KIND_ORDER.includes(k)),
+    Object.keys(counts).filter((k) => !KIND_ORDER.includes(k))
   );
 
   const chip = (k, label, count) =>
     `<button class="rfilter-chip${
       reportFilter === k ? " active" : ""
     }" data-kind="${esc(
-      k,
+      k
     )}" onclick="filterReports(this.dataset.kind)">${label}<span class="rfilter-count">${count}</span></button>`;
   const chipsHtml = scoped.length
     ? `<div class="rfilter">${chip(
         "Alle",
         "📋 Alle",
-        scoped.length,
+        scoped.length
       )}${presentKinds
         .map((k) => chip(k, `${KIND_ICON[k] || "📜"} ${k}`, counts[k]))
         .join("")}</div>`
@@ -3723,7 +3581,7 @@ renderers.berichte = async () => {
           const hidden =
             reportFilter !== "Alle" && reportFilter !== kind ? " hidden" : "";
           return `<div class="report-wrap${hidden}" data-kind="${esc(
-            kind,
+            kind
           )}">${renderReport(r)}</div>`;
         })
         .join("")
@@ -3761,10 +3619,10 @@ renderers.rangliste = async () => {
         p.name === state.user.name || p.friend
           ? ""
           : `<button class="btn small" onclick="friendRequestFor('${esc(
-              p.name,
+              p.name
             )}')">🤝 Freund</button>`
       }</td>
-    </tr>`,
+    </tr>`
     )
     .join("");
   el.innerHTML = `
@@ -3856,7 +3714,7 @@ renderers.shop = async () => {
             : `<div class="pp-buttons" id="pp-${it.id}" data-item="${it.id}" data-price="${it.price}"></div>`
         }
       </div>
-    </div>`,
+    </div>`
     )
     .join("");
 
@@ -3870,7 +3728,7 @@ renderers.shop = async () => {
                 p.test ? ' <span class="muted">(Test)</span>' : ""
               }</td><td class="num">${Number(p.price).toLocaleString("de-DE", {
                 minimumFractionDigits: 2,
-              })} €</td></tr>`,
+              })} €</td></tr>`
           )
           .join("")}</tbody></table>
       </div>`
@@ -3913,7 +3771,7 @@ renderers.shop = async () => {
     } catch (e) {
       el.insertAdjacentHTML(
         "beforeend",
-        `<p class="red">${esc(e.message)}</p>`,
+        `<p class="red">${esc(e.message)}</p>`
       );
     }
   }
@@ -4166,8 +4024,8 @@ renderers.changelog = () => {
     return `<div class="card cl-release">
       <div class="cl-head">
         <h3>Version ${esc(rel.version)}${
-          rel.title ? ` — ${esc(rel.title)}` : ""
-        } ${latest}</h3>
+      rel.title ? ` — ${esc(rel.title)}` : ""
+    } ${latest}</h3>
         <span class="muted cl-date">${esc(rel.date)}</span>
       </div>
       <ul class="cl-list">${items}</ul>
@@ -4197,7 +4055,7 @@ renderers.profil = async () => {
       (ms) =>
         `<option value="${ms}" ${settings.pollMs === ms ? "selected" : ""}>${
           ms / 1000
-        } Sekunden</option>`,
+        } Sekunden</option>`
     )
     .join("");
 
@@ -4209,11 +4067,11 @@ renderers.profil = async () => {
       <table>
         <tbody>
           <tr><td>Spielername</td><td><b class="gold">${esc(
-            p.name,
+            p.name
           )}</b></td></tr>
           <tr><td>Dorf</td><td>${esc(p.village.name)} <span class="muted">(${
-            p.village.x
-          }|${p.village.y})</span></td></tr>
+    p.village.x
+  }|${p.village.y})</span></td></tr>
           <tr><td>Punkte</td><td>${fmtNum(p.village.points)}</td></tr>
           <tr><td>Allianz</td><td>${
             p.alliance
@@ -4221,19 +4079,10 @@ renderers.profil = async () => {
               : '<span class="muted">keine</span>'
           }</td></tr>
           <tr><td>Gefochtene Berichte</td><td>${fmtNum(
-            p.reportCount,
+            p.reportCount
           )} · davon ${fmtNum(p.attackWins)} gewonnene Angriffe</td></tr>
           <tr><td>Mitglied seit</td><td>${fmtTime(p.created)}</td></tr>
           <tr><td>Zuletzt online</td><td>${fmtTime(p.lastSeen)}</td></tr>
-          <tr><td>E-Mail</td><td>${
-            p.email
-              ? `${esc(p.email)} ${
-                  p.emailVerified
-                    ? '<span class="ok">✓ bestätigt</span>'
-                    : '<span class="warn-text">nicht bestätigt</span>'
-                }`
-              : '<span class="muted">keine hinterlegt</span>'
-          }</td></tr>
         </tbody>
       </table>
     </div>
@@ -4243,7 +4092,7 @@ renderers.profil = async () => {
         <h3 style="margin-top:0">Dorf umbenennen</h3>
         <div class="formrow">
           <label>Name <input id="profVillage" maxlength="30" value="${esc(
-            p.village.name,
+            p.village.name
           )}"></label>
           <button class="btn primary" onclick="profileRename()">Speichern</button>
         </div>
@@ -4258,22 +4107,6 @@ renderers.profil = async () => {
         </div>
         <p class="muted" style="margin-top:8px">Nach dem Ändern musst du dich neu einloggen.</p>
       </div>
-
-      <div class="card">
-        <h3 style="margin-top:0">E-Mail-Adresse</h3>
-        <div class="formrow">
-          <label>E-Mail <input id="profEmail" type="email" autocomplete="email" value="${esc(
-            p.email || "",
-          )}"></label>
-          <button class="btn primary" onclick="profileChangeEmail()">Speichern</button>
-          ${
-            p.email && !p.emailVerified
-              ? `<button class="btn" onclick="resendVerification()">Bestätigung senden</button>`
-              : ""
-          }
-        </div>
-        <p class="muted" style="margin-top:8px">Wird für Passwort-Wiederherstellung genutzt. Nach einer Änderung ist eine erneute Bestätigung nötig.</p>
-      </div>
     </div>
 
     <div class="card">
@@ -4284,59 +4117,7 @@ renderers.profil = async () => {
         } onchange="setSetting('notifications', this.checked)"> Benachrichtigungen anzeigen</label>
         <label>Aktualisierungs-Intervall <select id="setPoll" onchange="setSetting('pollMs', Number(this.value))">${pollOpts}</select></label>
       </div>
-    </div>
-
-    <div class="card">
-      <h3 style="margin-top:0">Meine Daten &amp; Konto</h3>
-      <p class="muted">Du kannst jederzeit alle zu deinem Konto gespeicherten Daten herunterladen oder dein Konto endgültig löschen.</p>
-      <div class="formrow">
-        <button class="btn" onclick="accountExport()">⬇️ Meine Daten exportieren</button>
-        <button class="btn danger" onclick="accountDelete()">🗑️ Konto endgültig löschen</button>
-      </div>
-      <p class="muted" style="margin-top:10px">
-        <a href="/legal/datenschutz.html" target="_blank" rel="noopener">Datenschutz</a> ·
-        <a href="/legal/impressum.html" target="_blank" rel="noopener">Impressum</a> ·
-        <a href="/legal/agb.html" target="_blank" rel="noopener">AGB</a>
-      </p>
     </div>`;
-};
-
-window.accountExport = async () => {
-  try {
-    const data = await api("/api/account/export");
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `voxempire-daten-${data.account?.name || "konto"}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    toast("Datenexport heruntergeladen.");
-  } catch (e) {
-    toast(e.message, true);
-  }
-};
-
-window.accountDelete = async () => {
-  if (
-    !confirm(
-      "Konto WIRKLICH löschen? Alle Dörfer, Truppen, Berichte und Freundschaften gehen unwiderruflich verloren.",
-    )
-  )
-    return;
-  const pass = prompt("Zur Bestätigung dein aktuelles Passwort eingeben:");
-  if (pass == null) return;
-  try {
-    await api("/api/account/delete", { pass });
-    toast("Konto gelöscht. Auf Wiedersehen!");
-    showAuth();
-  } catch (e) {
-    toast(e.message, true);
-  }
 };
 
 window.profileRename = async () => {
@@ -4359,24 +4140,6 @@ window.profileChangePass = async () => {
     await api("/api/profile/password", { oldPass, newPass });
     toast("Passwort geändert — bitte neu einloggen.");
     showAuth();
-  } catch (e) {
-    toast(e.message, true);
-  }
-};
-
-window.profileChangeEmail = async () => {
-  const email = $("#profEmail").value.trim();
-  try {
-    const r = await api("/api/account/email", { email });
-    if (r.testMode && r.url) {
-      console.log("[VOXEMPIRE] Bestätigungslink (Testmodus):", r.url);
-      toast("Gespeichert. Testmodus: Bestätigungslink in der Konsole.");
-    } else {
-      toast("E-Mail gespeichert — bitte bestätige die neue Adresse.");
-    }
-    await refreshState();
-    renderHeader();
-    renderers.profil();
   } catch (e) {
     toast(e.message, true);
   }
@@ -4439,8 +4202,6 @@ $("#btnRegister").addEventListener("click", () => doAuth(true));
 $("#authPass").addEventListener("keydown", (e) => {
   if (e.key === "Enter") doAuth(false);
 });
-const btnForgot = $("#btnForgot");
-if (btnForgot) btnForgot.addEventListener("click", forgotPassword);
 $("#btnLogout").addEventListener("click", async () => {
   try {
     await api("/api/logout", {});
